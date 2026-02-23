@@ -1,0 +1,30 @@
+name: Build Daily IG Post (no publish)
+
+on:
+  schedule:
+    - cron: "0 8 * * *"   # 08:00 UTC
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Generate post (text + image)
+        env:
+          IG_HANDLE: ${{ secrets.IG_HANDLE }}
+        run: python make_post.py
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-post
+          path: out/
