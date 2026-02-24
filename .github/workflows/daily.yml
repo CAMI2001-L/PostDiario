@@ -37,3 +37,12 @@ jobs:
           git add public/latest.jpg public/latest.json
           git commit -m "Update latest IG post" || echo "No changes"
           git push
+
+      - name: Publish to Instagram
+        env:
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          IG_CAPTION_EXTRA: ${{ secrets.IG_CAPTION_EXTRA }}
+          PUBLIC_IMAGE_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/public/latest.jpg
+          GRAPH_API_VERSION: v25.0
+        run: python publish_ig.py
