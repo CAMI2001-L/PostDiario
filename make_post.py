@@ -14,16 +14,23 @@ def today_madrid():
     return datetime.now(tz=madrid).date().isoformat()
 
 def generate_ia_content():
-    # Se conecta a Groq usando el Secret de GitHub
     client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
     
+    # --- EL NUEVO CEREBRO DE TU COPYWRITER ---
     prompt = """
-    Eres un experto en desarrollo personal. Genera contenido para un post de Instagram.
-    Devuelve ÚNICAMENTE un objeto JSON con estas tres claves:
-    - "theme": Una palabra que resuma el tema en inglés (ej: anxiety, motivation, self-love).
-    - "phrase": Una reflexión profunda en español de máximo 20 palabras.
-    - "caption": Un pie de foto en español, empático, con emojis y 10 hashtags.
-    No añadas texto fuera del JSON.
+    Eres un copywriter experto en psicología y redes sociales, famoso por crear posts virales en Instagram que conectan profundamente con la gente.
+    Tu objetivo es hacer que el lector sienta: "Wow, parece que me leyeron la mente, esto está escrito para mí".
+    
+    Reglas estrictas para el contenido:
+    1. Frase ("phrase"): Máximo 15 palabras. Tiene que ser cruda, honesta y directa. CERO clichés de autoayuda barata (prohibido usar "persigue tus sueños" o "sonríele a la vida"). Debe ser una revelación o un límite sano que la gente quiera compartir en sus historias de inmediato.
+    2. Pie de foto ("caption"): 
+       - LÍNEA 1 (Gancho): Una frase corta que obligue a detener el scroll (ej: "Nadie te dice esto cuando estás sanando, pero...").
+       - CUERPO: Habla de tú a tú. Valida emociones reales y difíciles (el cansancio mental, soltar a alguien, poner límites, la ansiedad silenciosa).
+       - CIERRE (CTA): Termina SIEMPRE pidiendo interacción de forma natural (ej: "Guárdalo para leerlo cuando tu mente haga mucho ruido 🤍", "¿En qué etapa estás tú? Te leo", "Envíalo a quien necesite este abrazo virtual").
+       - EMOJIS: Usa pocos, pero estéticos (🤍, ✨, 🌿, 🩹). Incluye 10 hashtags estratégicos al final.
+    3. Tema ("theme"): Una sola palabra en INGLÉS que describa la vibra visual (ej: overthinking, healing, boundaries, solitude, letting-go).
+
+    Devuelve ÚNICAMENTE un objeto JSON válido con estas tres claves exactas: "theme", "phrase", "caption". No escribas nada más.
     """
     
     try:
@@ -36,26 +43,55 @@ def generate_ia_content():
         return content["theme"], content["phrase"], content["caption"]
     except Exception as e:
         print(f"Error IA Texto: {e}")
-        return "nature", "Lo simple también es una meta.", "Respira. #paz"
+        return "peace", "No tienes que resolver toda tu vida hoy.", "Respira. Guarda esto para recordarlo mañana. 🤍 #pazmental"
 
 def get_ia_background(theme, size=(1080, 1080)):
-    # Usa Pollinations (Gratis y sin API Key) para el fondo
+    """Usa Pollinations.ai con prompts mejorados para generar fondos artísticos y bonitos."""
     w, h = size
-    prompt_img = f"Abstract soft gradient background, dark mode, representing {theme}, aesthetic, no text"
-    formatted_prompt = prompt_img.replace(" ", "-") + "-" + str(uuid.uuid4())
+    
+    # --- NUEVA LISTA DE ESTILOS VISUALES MEJORADOS ---
+    # He incluido estilos que generan imágenes profundas, artísticas y estéticas,
+    # pero asegurando que sigan siendo oscuras para la legibilidad del texto.
+    prompts_mejorados = [
+        # Estilo 1: Fotografía Cinematográfica de Paisaje
+        f"Cinematic breathtaking landscape photography, related to {theme}, dark mood lighting, deep rich colors, high definition, 8k, photorealistic, intricate details, ultra-detailed, no text",
+        
+        # Estilo 2: Ilustración Fantástica Digital
+        f"Magical digital fantasy art illustration, inspired by {theme}, dark aesthetic, soft bioluminescence glow, dreaming atmosphere, deep colors, trending on ArtStation, no text",
+        
+        # Estilo 3: Arte Abstracto Geométrico 3D Moderno
+        f"Modern abstract 3D geometric art composition, related to {theme}, dark matte textures with neon accents, soft studio lighting, clean lines, minimalist but complex, cinematic composition, no text",
+        
+        # Estilo 4: Fotografía Macro Surrealista
+        f"Macro surreal photography of textures, related to {theme}, dark ethereal background, sharp focus on intricate details, deep colors, cinematic lighting, conceptual art, no text"
+    ]
+    
+    # Elegimos uno de los estilos al azar para que cada día sea diferente
+    prompt_img = random.choice(prompts_mejorados)
+    
+    # Formateamos el prompt para la URL (reemplazando espacios por guiones y añadiendo un UUID para evitar cacheo)
+    formatted_prompt = prompt_img.replace(" ", "-").replace(",", "") + "-" + str(uuid.uuid4())
     url = f"https://image.pollinations.ai/prompt/{formatted_prompt}?width={w}&height={h}&nologo=true"
     
+    print(f"Generando fondo IA 'bonito' con prompt: {prompt_img[:50]}...") # Imprimimos solo el inicio del prompt
     try:
         response = requests.get(url, timeout=30)
         if response.status_code == 200:
             img = Image.open(BytesIO(response.content)).convert("RGB")
-            dark_layer = Image.new("RGB", size, (18, 18, 20))
-            return Image.blend(img, dark_layer, 0.6) # Oscurece para que se lea la letra
+            
+            # --- MANTENEMOS EL FILTRO OSCURO ---
+            # Aunque la imagen sea más bonita, necesitamos que siga siendo oscura
+            # para que el texto blanco resalte perfectamente.
+            dark_layer = Image.new("RGB", size, (18, 18, 20)) # Color casi negro
+            return Image.blend(img, dark_layer, 0.6) # Mezclamos al 60% de oscuridad
+            
     except Exception as e:
-        print(f"Error IA Imagen: {e}")
+        print(f"Error descargando imagen IA (usando fondo por defecto): {e}")
     
-    # Fondo de emergencia si falla la IA
-    return Image.new("RGB", size, (30, 30, 35))
+    # Fallback: Fondo de emergencia si falla internet
+    base = Image.new("RGB", size, (18, 18, 20))
+    glow = Image.new("RGB", size, (60, 60, 75)).filter(ImageFilter.GaussianBlur(180))
+    return Image.blend(base, glow, 0.28)
 
 def wrap_text(draw, text, font, max_width):
     words = text.split()
