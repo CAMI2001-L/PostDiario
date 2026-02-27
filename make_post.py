@@ -74,7 +74,7 @@ def make_background(size=(1080, 1080)):
     base = Image.blend(base, glow, 0.28)
     return base
 
-def render_quote_image(quote, handle="@tu_cuenta", out_path=f"{OUT_DIR}/{IMG_NAME}"):
+def render_quote_image(quote, handle="@valeriacruz_221", out_path=f"{OUT_DIR}/{IMG_NAME}"):
     os.makedirs(OUT_DIR, exist_ok=True)
     img = make_background()
     draw = ImageDraw.Draw(img)
