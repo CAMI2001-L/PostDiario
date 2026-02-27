@@ -45,4 +45,5 @@ jobs:
           IG_CAPTION_EXTRA: ${{ secrets.IG_CAPTION_EXTRA }}
           PUBLIC_IMAGE_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/public/latest.jpg
           GRAPH_API_VERSION: v25.0
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: python publish_ig.py
