@@ -1,7 +1,10 @@
-import json, os, random
+import json, os, random, uuid
 from datetime import datetime
 from dateutil import tz
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
+import requests
+from io import BytesIO
+from groq import Groq
 
 OUT_DIR = "out"
 IMG_NAME = "post.jpg"
@@ -10,128 +13,105 @@ def today_madrid():
     madrid = tz.gettz("Europe/Madrid")
     return datetime.now(tz=madrid).date().isoformat()
 
-def load_library():
-    with open("phrases_es.json", "r", encoding="utf-8") as f:
-        return json.load(f)
+def generate_ia_content():
+    # Se conecta a Groq usando el Secret de GitHub
+    client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+    
+    prompt = """
+    Eres un experto en desarrollo personal. Genera contenido para un post de Instagram.
+    Devuelve ÚNICAMENTE un objeto JSON con estas tres claves:
+    - "theme": Una palabra que resuma el tema en inglés (ej: anxiety, motivation, self-love).
+    - "phrase": Una reflexión profunda en español de máximo 20 palabras.
+    - "caption": Un pie de foto en español, empático, con emojis y 10 hashtags.
+    No añadas texto fuera del JSON.
+    """
+    
+    try:
+        response = client.chat.completions.create(
+            messages=[{"role": "user", "content": prompt}],
+            model="llama-3.3-70b-versatile",
+            response_format={"type": "json_object"}
+        )
+        content = json.loads(response.choices[0].message.content)
+        return content["theme"], content["phrase"], content["caption"]
+    except Exception as e:
+        print(f"Error IA Texto: {e}")
+        return "nature", "Lo simple también es una meta.", "Respira. #paz"
 
-def pick_phrase(lib):
-    theme = random.choice(list(lib["themes"].keys()))
-    phrase = random.choice(lib["themes"][theme])
-    return theme, phrase
-
-def build_caption(theme, phrase, lib):
-    intros = [
-        "Una reflexión corta para hoy:",
-        "Un recordatorio suave:",
-        "Si hoy te pesa la cabeza, lee esto:",
-        "Hoy, una idea para respirar un poco mejor:"
-    ]
-    bodies = [
-        "A veces el problema no es lo que pasa, sino lo que te dices sobre lo que pasa.",
-        "No tienes que resolver tu vida hoy. Solo dar un paso honesto.",
-        "Lo que sientes tiene sentido. Y aun así, no define quién eres.",
-        "Tu mente habla fuerte. Tú puedes hablarle más claro."
-    ]
-    ctas = [
-        "Guárdalo si te sirve 🤍",
-        "¿Te pasa últimamente? Te leo en comentarios.",
-        "Envíalo a alguien que lo necesite hoy.",
-        "Si te resonó, dale guardar para volver cuando lo necesites."
-    ]
-
-    tags = lib["hashtags"][:]
-    random.shuffle(tags)
-    hashtags = " ".join(tags[:10])
-
-    caption = (
-        f"{random.choice(intros)}\n\n"
-        f"“{phrase}”\n\n"
-        f"{random.choice(bodies)}\n\n"
-        f"{random.choice(ctas)}\n\n"
-        f"{hashtags}"
-    )
-    return caption, hashtags
+def get_ia_background(theme, size=(1080, 1080)):
+    # Usa Pollinations (Gratis y sin API Key) para el fondo
+    w, h = size
+    prompt_img = f"Abstract soft gradient background, dark mode, representing {theme}, aesthetic, no text"
+    formatted_prompt = prompt_img.replace(" ", "-") + "-" + str(uuid.uuid4())
+    url = f"https://image.pollinations.ai/prompt/{formatted_prompt}?width={w}&height={h}&nologo=true"
+    
+    try:
+        response = requests.get(url, timeout=30)
+        if response.status_code == 200:
+            img = Image.open(BytesIO(response.content)).convert("RGB")
+            dark_layer = Image.new("RGB", size, (18, 18, 20))
+            return Image.blend(img, dark_layer, 0.6) # Oscurece para que se lea la letra
+    except Exception as e:
+        print(f"Error IA Imagen: {e}")
+    
+    # Fondo de emergencia si falla la IA
+    return Image.new("RGB", size, (30, 30, 35))
 
 def wrap_text(draw, text, font, max_width):
     words = text.split()
-    lines = []
-    line = []
+    lines, line = [], []
     for w in words:
-        test = " ".join(line + [w])
-        if draw.textlength(test, font=font) <= max_width:
+        if draw.textlength(" ".join(line + [w]), font=font) <= max_width:
             line.append(w)
         else:
             lines.append(" ".join(line))
             line = [w]
-    if line:
-        lines.append(" ".join(line))
+    if line: lines.append(" ".join(line))
     return lines
 
-def make_background(size=(1080, 1080)):
-    w, h = size
-    base = Image.new("RGB", size, (18, 18, 20))
-    glow = Image.new("RGB", size, (60, 60, 75)).filter(ImageFilter.GaussianBlur(180))
-    base = Image.blend(base, glow, 0.28)
-    return base
-
-def render_quote_image(quote, handle="@valeriacruz_221", out_path=f"{OUT_DIR}/{IMG_NAME}"):
+def render_quote_image(quote, theme, handle="@tu_cuenta", out_path=f"{OUT_DIR}/{IMG_NAME}"):
     os.makedirs(OUT_DIR, exist_ok=True)
-    img = make_background()
+    img = get_ia_background(theme)
     draw = ImageDraw.Draw(img)
 
     font_path = "assets/fonts/PlayfairDisplay-Regular.ttf"
     if not os.path.exists(font_path):
-        raise FileNotFoundError(
-            "Falta la fuente TTF en assets/fonts/PlayfairDisplay-Regular.ttf"
-        )
+        quote_font = ImageFont.load_default()
+        small_font = ImageFont.load_default()
+    else:
+        quote_font = ImageFont.truetype(font_path, 64)
+        small_font = ImageFont.truetype(font_path, 34)
 
-    quote_font = ImageFont.truetype(font_path, 64)
-    small_font = ImageFont.truetype(font_path, 34)
-
-    margin = 120
-    max_width = img.size[0] - 2 * margin
-
-    lines = wrap_text(draw, f"“{quote}”", quote_font, max_width)
-
-    line_h = 78
-    block_h = len(lines) * line_h
-    y = (img.size[1] - block_h) // 2 - 40
-
+    lines = wrap_text(draw, f"“{quote}”", quote_font, img.size[0] - 240)
+    
+    y = (img.size[1] - (len(lines) * 78)) // 2 - 40
     for line in lines:
         x = (img.size[0] - draw.textlength(line, font=quote_font)) / 2
         draw.text((x + 2, y + 2), line, font=quote_font, fill=(0, 0, 0))
         draw.text((x, y), line, font=quote_font, fill=(245, 245, 245))
-        y += line_h
+        y += 78
 
-    sig = handle
-    sx = (img.size[0] - draw.textlength(sig, font=small_font)) / 2
-    sy = img.size[1] - 140
-    draw.text((sx, sy), sig, font=small_font, fill=(200, 200, 200))
-
+    draw.text(((img.size[0] - draw.textlength(handle, font=small_font)) / 2, img.size[1] - 140), handle, font=small_font, fill=(200, 200, 200))
     img.save(out_path, quality=95)
 
 def main():
-    lib = load_library()
-    date_str = today_madrid()
-    theme, phrase = pick_phrase(lib)
-    caption, hashtags = build_caption(theme, phrase, lib)
-
+    theme, phrase, caption = generate_ia_content()
     handle = os.environ.get("IG_HANDLE", "@tu_cuenta")
-    render_quote_image(phrase, handle=handle)
+    
+    render_quote_image(phrase, theme, handle=handle)
 
     payload = {
-        "date": date_str,
+        "date": today_madrid(),
         "theme": theme,
         "phrase": phrase,
         "caption": caption,
-        "hashtags": hashtags,
         "image_path": f"{OUT_DIR}/{IMG_NAME}"
     }
 
     with open(f"{OUT_DIR}/post.json", "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
 
-    print("OK:", payload["date"], payload["theme"])
+    print("Post IA Generado con éxito.")
 
 if __name__ == "__main__":
     main()
