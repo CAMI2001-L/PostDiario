@@ -1,4 +1,4 @@
-name: Build Daily IG Post (no publish)
+name: Build Daily IG Post (publish)
 
 on:
   workflow_dispatch:
@@ -22,9 +22,9 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Generate post
-        env:                                                
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}        
-          IG_HANDLE: "@valeriacruz_221"                       
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          IG_HANDLE: "@valeriacruz_221"
         run: python make_post.py
 
       - name: Copy latest image to public/
@@ -41,11 +41,21 @@ jobs:
           git commit -m "Update latest IG post" || echo "No changes"
           git push
 
+      - name: Check public image URL (GitHub Pages)
+        env:
+          PUBLIC_IMAGE_URL: https://cami2001-l.github.io/PostDiario/public/latest.jpg
+        run: |
+          echo "Checking: $PUBLIC_IMAGE_URL"
+          curl -I "$PUBLIC_IMAGE_URL"
+          curl -L "$PUBLIC_IMAGE_URL" --output /tmp/latest.jpg
+          file /tmp/latest.jpg
+          ls -lh /tmp/latest.jpg
+
       - name: Publish to Instagram
         env:
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
           IG_CAPTION_EXTRA: ${{ secrets.IG_CAPTION_EXTRA }}
-          PUBLIC_IMAGE_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/public/latest.jpg
+          PUBLIC_IMAGE_URL: https://cami2001-l.github.io/PostDiario/public/latest.jpg
           GRAPH_API_VERSION: v25.0
         run: python publish_ig.py
