@@ -1,7 +1,7 @@
 import json, os, random, uuid
 from datetime import datetime
 from dateutil import tz
-from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps, ImageEnhance
 import requests
 from io import BytesIO
 from groq import Groq
@@ -44,39 +44,43 @@ def generate_ia_content():
         print(f"Error IA Texto: {e}")
         return "peace", "No tienes que resolver toda tu vida hoy.", "Respira. Guarda esto para recordarlo mañana. 🤍 #pazmental"
 
-def apply_vignette(img: Image.Image, strength: float = 0.35) -> Image.Image:
+def apply_vignette(img: Image.Image, strength: float = 0.18) -> Image.Image:
     """
-    Oscurece bordes y deja el centro más claro para legibilidad.
+    Oscurece bordes (muy suave) y mantiene el centro más claro.
     strength: 0.0 (nada) -> 1.0 (muy oscuro)
     """
     w, h = img.size
     mask = Image.new("L", (w, h), 0)
     d = ImageDraw.Draw(mask)
 
-    # Elipse grande para que el centro quede luminoso, bordes más oscuros
-    d.ellipse((-w * 0.15, -h * 0.15, w * 1.15, h * 1.15), fill=255)
-    mask = mask.filter(ImageFilter.GaussianBlur(int(min(w, h) * 0.12)))
+    # Centro claro, bordes oscuros
+    d.ellipse((-w * 0.12, -h * 0.12, w * 1.12, h * 1.12), fill=255)
+    mask = mask.filter(ImageFilter.GaussianBlur(int(min(w, h) * 0.10)))
     mask = ImageOps.autocontrast(mask)
 
-    dark = Image.new("RGB", (w, h), (10, 10, 12))
+    # Oscurecido global MUY suave
+    dark = Image.new("RGB", (w, h), (12, 12, 14))
     darkened = Image.blend(img, dark, strength)
-    return Image.composite(img, darkened, mask)
+
+    # Componemos usando máscara (bordes más oscuros, centro más claro)
+    return Image.composite(img, darkened, ImageOps.invert(mask))
 
 def get_ia_background(theme, size=(1080, 1080)):
     """
-    Genera fondo IA con variedad real:
-    - prompts más luminosos (sin 'dark' obligatorio)
+    Fondo IA con variedad real:
+    - prompts más luminosos
     - uuid para evitar cache
-    - overlay de color suave aleatorio
-    - vignette + oscuridad suave aleatoria para texto legible
+    - mejora de brillo/contraste/color
+    - overlay de color suave
+    - viñeta suave para legibilidad
     """
     w, h = size
 
     prompts_mejorados = [
-        f"Cinematic landscape photography, related to {theme}, golden hour or soft daylight, deep colors, high detail, 8k, photorealistic, no text",
-        f"Dreamy digital art illustration, inspired by {theme}, soft glow, pastel accents, cinematic light, high detail, trending on ArtStation, no text",
-        f"Modern abstract 3D geometric art, related to {theme}, matte textures with subtle neon accents, studio lighting, clean composition, high detail, no text",
-        f"Macro surreal texture photography, related to {theme}, colorful highlights, sharp detail, cinematic light, conceptual art, no text",
+        f"Cinematic landscape photography related to {theme}, soft light, dreamy atmosphere, pastel tones, high detail, 8k, no text",
+        f"Dreamy digital art illustration inspired by {theme}, soft glow, calm aesthetic background, pastel accents, high detail, no text",
+        f"Modern abstract 3D geometric art related to {theme}, elegant gradients, pastel colors, studio lighting, minimal aesthetic, high detail, no text",
+        f"Macro texture photography related to {theme}, colorful highlights, soft lighting, aesthetic background, high detail, no text",
     ]
 
     prompt_img = random.choice(prompts_mejorados)
@@ -90,13 +94,26 @@ def get_ia_background(theme, size=(1080, 1080)):
         if response.status_code == 200:
             img = Image.open(BytesIO(response.content)).convert("RGB")
 
-            # Overlay de color MUY suave para variar el mood
+            # DEBUG opcional: ver imagen cruda
+            os.makedirs(OUT_DIR, exist_ok=True)
+            img.save(f"{OUT_DIR}/_bg_raw.jpg", "JPEG", quality=90)
+
+            # Mejora visual (evita que se vea apagado)
+            img = ImageEnhance.Brightness(img).enhance(1.10)
+            img = ImageEnhance.Contrast(img).enhance(1.12)
+            img = ImageEnhance.Color(img).enhance(1.08)
+
+            # Overlay suave para variar el "mood"
             tints = [(255, 180, 190), (180, 220, 255), (200, 255, 210), (255, 230, 180)]
             overlay = Image.new("RGB", size, random.choice(tints))
-            img = Image.blend(img, overlay, random.uniform(0.06, 0.12))
+            img = Image.blend(img, overlay, random.uniform(0.05, 0.10))
 
-            # Vignette + oscuridad suave (dinámica)
-            img = apply_vignette(img, strength=random.uniform(0.25, 0.42))
+            # Viñeta + oscuridad MUY suave
+            img = apply_vignette(img, strength=random.uniform(0.12, 0.22))
+
+            # DEBUG opcional: ver resultado final del fondo
+            img.save(f"{OUT_DIR}/_bg_final.jpg", "JPEG", quality=90)
+
             return img
         else:
             print(f"Pollinations status: {response.status_code}")
@@ -104,10 +121,10 @@ def get_ia_background(theme, size=(1080, 1080)):
         print(f"Error descargando imagen IA (usando fallback): {e}")
 
     # Fallback si falla internet
-    base = Image.new("RGB", size, (30, 30, 35))
-    glow = Image.new("RGB", size, (120, 120, 145)).filter(ImageFilter.GaussianBlur(180))
+    base = Image.new("RGB", size, (220, 220, 230))
+    glow = Image.new("RGB", size, (255, 230, 240)).filter(ImageFilter.GaussianBlur(180))
     img = Image.blend(base, glow, 0.22)
-    img = apply_vignette(img, strength=0.35)
+    img = apply_vignette(img, strength=0.15)
     return img
 
 def wrap_text(draw, text, font, max_width):
