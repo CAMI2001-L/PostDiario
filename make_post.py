@@ -23,9 +23,9 @@ def generate_ia_content():
     Reglas estrictas para el contenido:
     1. Frase ("phrase"): Máximo 25 palabras. Tiene que ser cruda, honesta y directa. CERO clichés de autoayuda barata (prohibido usar "persigue tus sueños" o "sonríele a la vida"). Debe ser una revelación o un límite sano que la gente quiera compartir en sus historias de inmediato.
     2. Pie de foto ("caption"):
-       - LÍNEA 1 (Gancho): Una frase corta que obligue a detener el scroll (ej: "Nadie te dice esto cuando estás sanando, pero...").
+       - LÍNEA 1 (Gancho): Una frase que obligue a detener el scroll (ej: "Nadie te dice esto cuando estás sanando, pero...").
        - CUERPO: Habla de tú a tú. Valida emociones reales y difíciles (el cansancio mental, soltar a alguien, poner límites, la ansiedad silenciosa).
-       - CIERRE (CTA): Termina SIEMPRE pidiendo interacción de forma natural (ej: "Guárdalo para leerlo cuando tu mente haga mucho ruido 🤍", "¿En qué etapa estás tú? Te leo", "Envíalo a quien necesite este abrazo virtual").
+       - CIERRE (CTA): Termina SIEMPRE pidiendo interacción de forma natural (ej: "Guárdalo para leerlo cuando tu mente haga mucho ruido 🤍",  "Envíalo a quien necesite este abrazo virtual").
        - EMOJIS: Usa pocos, pero estéticos (🤍, ✨, 🌿, 🩹). Incluye 10 hashtags estratégicos al final.
     3. Tema ("theme"): Una sola palabra en INGLÉS que describa la vibra visual (ej: overthinking, healing, boundaries, solitude, letting-go).
 
@@ -77,10 +77,11 @@ def get_ia_background(theme, size=(1080, 1080)):
     w, h = size
 
     prompts_mejorados = [
-        f"Cinematic landscape photography related to {theme}, soft light, dreamy atmosphere, pastel tones, high detail, 8k, no text",
-        f"Dreamy digital art illustration inspired by {theme}, soft glow, calm aesthetic background, pastel accents, high detail, no text",
-        f"Modern abstract 3D geometric art related to {theme}, elegant gradients, pastel colors, studio lighting, minimal aesthetic, high detail, no text",
-        f"Macro texture photography related to {theme}, colorful highlights, soft lighting, aesthetic background, high detail, no text",
+        f"soft focus aesthetic photography background, {theme}, warm natural light, bokeh, depth of field, cinematic, 35mm film look, high detail, no text, no words",
+        f"aesthetic nature photo background, {theme}, sunrise light rays, dreamy fog, shallow depth of field, film grain, high detail, no text, no words",
+        f"cozy interior aesthetic photography background, {theme}, window light, plants, soft shadows, bokeh, 35mm, film look, high detail, no text, no words",
+        f"abstract colorful gradient mesh background, {theme}, smooth soft shapes, modern aesthetic, high detail, no text, no words",
+        f"minimal aesthetic texture background, {theme}, paper texture, subtle shadows, premium design, high detail, no text, no words",
     ]
 
     prompt_img = random.choice(prompts_mejorados)
@@ -91,32 +92,32 @@ def get_ia_background(theme, size=(1080, 1080)):
 
     try:
         response = requests.get(url, timeout=40)
-        if response.status_code == 200:
-            img = Image.open(BytesIO(response.content)).convert("RGB")
-
-            # DEBUG opcional: ver imagen cruda
-            os.makedirs(OUT_DIR, exist_ok=True)
-            img.save(f"{OUT_DIR}/_bg_raw.jpg", "JPEG", quality=90)
-
-            # Mejora visual (evita que se vea apagado)
-            img = ImageEnhance.Brightness(img).enhance(1.10)
-            img = ImageEnhance.Contrast(img).enhance(1.12)
-            img = ImageEnhance.Color(img).enhance(1.08)
-
-            # Overlay suave para variar el "mood"
-            tints = [(255, 180, 190), (180, 220, 255), (200, 255, 210), (255, 230, 180)]
-            overlay = Image.new("RGB", size, random.choice(tints))
-            img = Image.blend(img, overlay, random.uniform(0.05, 0.10))
-
-            # Viñeta + oscuridad MUY suave
-            img = apply_vignette(img, strength=random.uniform(0.12, 0.22))
-
-            # DEBUG opcional: ver resultado final del fondo
-            img.save(f"{OUT_DIR}/_bg_final.jpg", "JPEG", quality=90)
-
-            return img
-        else:
-            print(f"Pollinations status: {response.status_code}")
+     if response.status_code == 200:
+        img = Image.open(BytesIO(response.content)).convert("RGB")
+    
+        # Aumentar un poco contraste y color para evitar fondos apagados
+        img = ImageEnhance.Contrast(img).enhance(1.15)
+        img = ImageEnhance.Color(img).enhance(1.10)
+    
+        # Blur MUY suave (look profundidad tipo fotografía)
+        img = img.filter(ImageFilter.GaussianBlur(radius=1.0))
+    
+        # Grain suave tipo film
+        noise = Image.effect_noise(img.size, random.uniform(18, 28)).convert("L")
+        noise = ImageOps.colorize(noise, black=(0,0,0), white=(255,255,255)).convert("RGB")
+        img = Image.blend(img, noise, 0.05)
+    
+        # Overlay de color suave para variar el mood
+        tints = [(255,180,190), (180,220,255), (200,255,210), (255,230,180)]
+        overlay = Image.new("RGB", size, random.choice(tints))
+        img = Image.blend(img, overlay, random.uniform(0.04, 0.08))
+    
+        # Viñeta suave para que el texto se lea mejor
+        img = apply_vignette(img, strength=random.uniform(0.10, 0.18))
+    
+        return img
+    else:
+        print(f"Pollinations status: {response.status_code}")
     except Exception as e:
         print(f"Error descargando imagen IA (usando fallback): {e}")
 
