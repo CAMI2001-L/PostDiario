@@ -90,36 +90,39 @@ def get_ia_background(theme, size=(1080, 1080)):
 
     print(f"Generando fondo IA con prompt: {prompt_img[:80]}...")
 
-    try:
-        response = requests.get(url, timeout=40)
-     if response.status_code == 200:
+try:
+    response = requests.get(url, timeout=40)
+
+    if response.status_code == 200:
         img = Image.open(BytesIO(response.content)).convert("RGB")
-    
-        # Aumentar un poco contraste y color para evitar fondos apagados
+
+        # Aumentar contraste y color
         img = ImageEnhance.Contrast(img).enhance(1.15)
         img = ImageEnhance.Color(img).enhance(1.10)
-    
-        # Blur MUY suave (look profundidad tipo fotografía)
+
+        # Blur suave
         img = img.filter(ImageFilter.GaussianBlur(radius=1.0))
-    
-        # Grain suave tipo film
+
+        # Grain tipo film
         noise = Image.effect_noise(img.size, random.uniform(18, 28)).convert("L")
         noise = ImageOps.colorize(noise, black=(0,0,0), white=(255,255,255)).convert("RGB")
         img = Image.blend(img, noise, 0.05)
-    
-        # Overlay de color suave para variar el mood
+
+        # Overlay de color suave
         tints = [(255,180,190), (180,220,255), (200,255,210), (255,230,180)]
         overlay = Image.new("RGB", size, random.choice(tints))
         img = Image.blend(img, overlay, random.uniform(0.04, 0.08))
-    
-        # Viñeta suave para que el texto se lea mejor
+
+        # Viñeta
         img = apply_vignette(img, strength=random.uniform(0.10, 0.18))
-    
+
         return img
+
     else:
         print(f"Pollinations status: {response.status_code}")
-    except Exception as e:
-        print(f"Error descargando imagen IA (usando fallback): {e}")
+
+except Exception as e:
+    print(f"Error descargando imagen IA: {e}")
 
     # Fallback si falla internet
     base = Image.new("RGB", size, (220, 220, 230))
