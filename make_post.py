@@ -1,210 +1,383 @@
-import json, os, random, uuid
+import io
+import json
+import os
+import random
 from datetime import datetime
+from typing import Any
+
 from dateutil import tz
-from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps, ImageEnhance
-import requests
-from io import BytesIO
-from groq import Groq
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
+from google import genai
+from google.genai import types
 
 OUT_DIR = "out"
 IMG_NAME = "post.jpg"
 
 
-def today_madrid():
+def today_madrid() -> str:
     madrid = tz.gettz("Europe/Madrid")
     return datetime.now(tz=madrid).date().isoformat()
 
 
-def generate_ia_content():
-    client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+def get_client() -> genai.Client:
+    if not os.environ.get("GEMINI_API_KEY"):
+        raise RuntimeError("Falta GEMINI_API_KEY en variables de entorno.")
+    return genai.Client()
+
+
+def safe_json_from_response(response: Any) -> dict:
+    """
+    Intenta extraer JSON fiable desde response.text.
+    """
+    text = getattr(response, "text", None)
+    if not text:
+        raise RuntimeError("Gemini no devolvió texto para el JSON.")
+
+    text = text.strip()
+
+    # Por si viniera envuelto en markdown
+    if text.startswith("```"):
+        text = text.strip("`")
+        if text.lower().startswith("json"):
+            text = text[4:].strip()
+
+    return json.loads(text)
+
+
+def generate_ia_content() -> tuple[str, str, str, str]:
+    """
+    Devuelve:
+    - theme
+    - phrase
+    - caption
+    - visual_style
+    """
+    client = get_client()
 
     prompt = """
-Eres un copywriter experto en psicología y redes sociales, famoso por crear posts virales en Instagram que conectan profundamente con la gente.
-Tu objetivo es hacer que el lector sienta: "Wow, parece que me leyeron la mente, esto está escrito para mí".
+Eres guionista y copywriter senior de una cuenta de Instagram de reflexiones psicológicas y emocionales.
 
-Reglas estrictas para el contenido:
-1. Frase ("phrase"): Máximo 15 palabras. Tiene que ser cruda, honesta y directa. CERO clichés de autoayuda barata (prohibido usar "persigue tus sueños" o "sonríele a la vida"). Debe ser una revelación o un límite sano que la gente quiera compartir en sus historias de inmediato.
-2. Pie de foto ("caption"):
-   - LÍNEA 1 (Gancho): Una frase corta que obligue a detener el scroll (ej: "Nadie te dice esto cuando estás sanando, pero...").
-   - CUERPO: Habla de tú a tú. Valida emociones reales y difíciles (el cansancio mental, soltar a alguien, poner límites, la ansiedad silenciosa).
-   - CIERRE (CTA): Termina SIEMPRE pidiendo interacción de forma natural (ej: "Guárdalo para leerlo cuando tu mente haga mucho ruido 🤍", "¿En qué etapa estás tú? Te leo", "Envíalo a quien necesite este abrazo virtual").
-   - EMOJIS: Usa pocos, pero estéticos (🤍, ✨, 🌿, 🩹). Incluye 10 hashtags estratégicos al final.
-3. Tema ("theme"): Una sola palabra en INGLÉS que describa la vibra visual (ej: overthinking, healing, boundaries, solitude, letting-go).
+Tu trabajo NO es sonar motivacional genérico.
+Tu trabajo es escribir frases que hagan que la persona piense:
+“Esto describe exactamente lo que estoy sintiendo”.
 
-Devuelve ÚNICAMENTE un objeto JSON válido con estas tres claves exactas: "theme", "phrase", "caption". No escribas nada más.
-"""
+Objetivo:
+Crear una pieza emocional, honesta, compartible y visualmente potente.
+
+Contexto de la cuenta:
+- Tema general: psicología cotidiana, límites, ansiedad silenciosa, duelo emocional, autoestima, cansancio mental, desapego, sanar.
+- Tono: íntimo, elegante, profundo, claro, humano.
+- Estilo: menos autoayuda vacía, más verdad emocional.
+- Público: personas que se sienten sobrepasadas, sensibles, agotadas emocionalmente o en proceso de sanar.
+- Idioma: español.
+- Prohibido sonar a coach barato.
+
+Reglas estrictas:
+
+1) phrase
+- Máximo 14 palabras.
+- Debe sentirse como una verdad incómoda, un límite sano o una revelación emocional.
+- Debe poder ir sola en una imagen.
+- Debe ser compartible.
+- No uses clichés como:
+  "todo pasa por algo"
+  "cree en ti"
+  "persigue tus sueños"
+  "todo estará bien"
+  "eres suficiente"
+- Evita frases demasiado abstractas o espirituales.
+- Debe sonar humana, concreta y emocional.
+
+2) caption
+Estructura exacta:
+- Línea 1: gancho muy fuerte, corto, que frene el scroll.
+- Luego 2 a 4 párrafos breves.
+- Debe validar una emoción real.
+- Debe desarrollar la idea de la frase sin repetirla literalmente.
+- Debe cerrar con un CTA natural, suave y humano.
+- Añade 8 a 10 hashtags relevantes y no genéricos.
+
+3) theme
+- Una sola palabra en inglés.
+- Debe servir para inspirar el fondo visual.
+- Ejemplos válidos: healing, solitude, boundaries, overthinking, grief, softness, release, peace
+
+4) visual_style
+- Devuelve una descripción visual breve para generar el fondo.
+- Tiene que ser estética, cinematográfica y útil para una imagen de Instagram.
+- Debe describir solo el fondo, no texto.
+- Ejemplo: "dreamy foggy landscape with soft golden light and blurred flowers"
+
+5) style_guardrails
+El contenido debe sonar:
+- honesto
+- emocionalmente inteligente
+- elegante
+- íntimo
+- no cursi
+- no influencer motivacional
+- no pseudoespiritual
+
+Devuelve SOLO un JSON válido con estas claves exactas:
+{
+  "theme": "...",
+  "phrase": "...",
+  "caption": "...",
+  "visual_style": "..."
+}
+""".strip()
+
+    schema = {
+        "type": "object",
+        "properties": {
+            "theme": {"type": "string"},
+            "phrase": {"type": "string"},
+            "caption": {"type": "string"},
+            "visual_style": {"type": "string"},
+        },
+        "required": ["theme", "phrase", "caption", "visual_style"],
+        "propertyOrdering": ["theme", "phrase", "caption", "visual_style"],
+    }
 
     try:
-        response = client.chat.completions.create(
-            messages=[{"role": "user", "content": prompt}],
-            model="llama-3.3-70b-versatile",
-            response_format={"type": "json_object"}
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_json_schema=schema,
+                temperature=0.9,
+            ),
         )
-        content = json.loads(response.choices[0].message.content)
-        return content["theme"], content["phrase"], content["caption"]
+        content = safe_json_from_response(response)
+
+        theme = str(content["theme"]).strip()
+        phrase = str(content["phrase"]).strip()
+        caption = str(content["caption"]).strip()
+        visual_style = str(content["visual_style"]).strip()
+
+        return theme, phrase, caption, visual_style
+
     except Exception as e:
-        print(f"Error IA Texto: {e}")
+        print(f"Error Gemini texto: {e}")
         return (
-            "peace",
-            "No tienes que resolver toda tu vida hoy.",
-            "Respira. Guarda esto para recordarlo mañana. 🤍 #pazmental"
+            "healing",
+            "No te agotaste por sentir, sino por sostener demasiado tiempo.",
+            "A veces no estás rota.\nEstás cansada.\n\nCansada de sostener, de entender, de esperar que algo cambie mientras tú sigues cargando con todo.\n\nSanar también es dejar de exigirte tanta fortaleza.\n\nGuárdalo para esos días en los que se te olvida tratarte con más ternura. 🤍\n\n#sanar #saludmental #psicologia #amorpropio #ansiedad #bienestar #crecimientopersonal #limites",
+            "dreamy foggy field with soft golden sunrise light and delicate blurred flowers",
         )
 
 
-def apply_vignette(img: Image.Image, strength: float = 0.15) -> Image.Image:
+def extract_first_image(response: Any) -> Image.Image:
     """
-    Viñeta suave: oscurece bordes y mantiene centro más claro.
-    strength: 0.0 -> 1.0
+    Extrae la primera imagen inline del response de Gemini.
+    """
+    candidates = getattr(response, "candidates", None)
+    if not candidates:
+        raise RuntimeError("Gemini no devolvió candidates para la imagen.")
+
+    for candidate in candidates:
+        content = getattr(candidate, "content", None)
+        if not content:
+            continue
+        parts = getattr(content, "parts", None) or []
+        for part in parts:
+            inline_data = getattr(part, "inline_data", None)
+            if inline_data and getattr(inline_data, "data", None):
+                image_bytes = inline_data.data
+                return Image.open(io.BytesIO(image_bytes)).convert("RGB")
+
+    raise RuntimeError("No se encontró ninguna imagen en la respuesta de Gemini.")
+
+
+def apply_vignette(img: Image.Image, strength: float = 0.12) -> Image.Image:
+    """
+    Viñeta suave para mejorar legibilidad del texto sin apagar demasiado el fondo.
     """
     w, h = img.size
     mask = Image.new("L", (w, h), 0)
-    d = ImageDraw.Draw(mask)
+    draw = ImageDraw.Draw(mask)
 
-    # Centro claro (elipse grande), bordes oscurecen
-    d.ellipse((-w * 0.12, -h * 0.12, w * 1.12, h * 1.12), fill=255)
+    draw.ellipse(
+        (-w * 0.10, -h * 0.10, w * 1.10, h * 1.10),
+        fill=255,
+    )
     mask = mask.filter(ImageFilter.GaussianBlur(int(min(w, h) * 0.10)))
     mask = ImageOps.autocontrast(mask)
 
-    dark = Image.new("RGB", (w, h), (12, 12, 14))
+    dark = Image.new("RGB", (w, h), (10, 10, 12))
     darkened = Image.blend(img, dark, strength)
 
-    # Invertimos máscara para que se oscurezcan más los bordes
     return Image.composite(img, darkened, ImageOps.invert(mask))
 
 
-def get_ia_background(theme, size=(1080, 1080)):
-    """
-    Genera un fondo estético con Pollinations + acabado pro:
-    - prompts más "instagram"
-    - uuid para evitar cache
-    - contraste/color suave
-    - blur suave
-    - grain film suave
-    - overlay de color suave
-    - viñeta suave para legibilidad
-    """
+def get_ia_background(theme: str, visual_style: str, size=(1080, 1080)) -> Image.Image:
+    client = get_client()
     w, h = size
 
-    prompts_mejorados = [
-        f"aesthetic landscape photography background related to {theme}, golden hour light, fog, depth of field, cinematic, 35mm film look, high detail, no text",
-        f"dreamy nature photography background related to {theme}, soft sunlight, flowers, bokeh, shallow depth of field, aesthetic instagram background, no text",
-        f"cozy aesthetic interior photography background related to {theme}, warm window light, plants, soft shadows, film photography, no text",
-        f"modern abstract gradient background related to {theme}, smooth colorful shapes, aesthetic design, soft lighting, high detail, no text",
-    ]
+    prompt = f"""
+Create a premium Instagram quote background.
 
-    prompt_img = random.choice(prompts_mejorados)
-    formatted_prompt = prompt_img.replace(" ", "-").replace(",", "") + "-" + str(uuid.uuid4())
-    url = f"https://image.pollinations.ai/prompt/{formatted_prompt}?width={w}&height={h}&nologo=true"
+Square composition, no text, no letters, no typography, no watermark, no words.
+Style: cinematic, aesthetic, elegant, soft depth of field, premium editorial feel.
+Theme: {theme}
+Scene: {visual_style}
 
-    print(f"Generando fondo IA con prompt: {prompt_img[:80]}...")
+Requirements:
+- visually rich and beautiful
+- not flat, not plain, not empty
+- suitable for centered white quote text
+- soft light
+- depth, atmosphere, texture
+- premium Instagram aesthetic
+- no people faces
+- no readable text
+- no black empty background
+- no gray empty gradient
+""".strip()
 
     try:
-        response = requests.get(url, timeout=40)
+        response = client.models.generate_content(
+            model="gemini-2.5-flash-image",
+            contents=[prompt],
+            config=types.GenerateContentConfig(
+                image_config=types.ImageConfig(
+                    aspect_ratio="1:1",
+                )
+            ),
+        )
 
-        if response.status_code == 200:
-            img = Image.open(BytesIO(response.content)).convert("RGB")
+        img = extract_first_image(response)
 
-            # Mejoras para evitar fondos apagados
-            img = ImageEnhance.Contrast(img).enhance(1.15)
-            img = ImageEnhance.Color(img).enhance(1.10)
+        # Ajustes visuales suaves para feed tipo Instagram
+        img = ImageEnhance.Contrast(img).enhance(1.12)
+        img = ImageEnhance.Color(img).enhance(1.08)
+        img = ImageEnhance.Brightness(img).enhance(1.03)
 
-            # Blur suave
-            img = img.filter(ImageFilter.GaussianBlur(radius=1.0))
+        # Blur muy suave para look más editorial
+        img = img.filter(ImageFilter.GaussianBlur(radius=0.8))
 
-            # Grain tipo film
-            noise = Image.effect_noise(img.size, random.uniform(18, 28)).convert("L")
-            noise = ImageOps.colorize(noise, black=(0, 0, 0), white=(255, 255, 255)).convert("RGB")
-            img = Image.blend(img, noise, 0.05)
+        # Grain fino tipo film
+        noise = Image.effect_noise(img.size, random.uniform(12, 20)).convert("L")
+        noise = ImageOps.colorize(noise, black=(0, 0, 0), white=(255, 255, 255)).convert("RGB")
+        img = Image.blend(img, noise, 0.04)
 
-            # Overlay de color suave
-            tints = [(255, 180, 190), (180, 220, 255), (200, 255, 210), (255, 230, 180)]
-            overlay = Image.new("RGB", size, random.choice(tints))
-            img = Image.blend(img, overlay, random.uniform(0.04, 0.08))
+        # Overlay muy leve para variar el mood
+        tints = [
+            (255, 228, 220),
+            (221, 233, 255),
+            (223, 242, 231),
+            (255, 239, 212),
+        ]
+        overlay = Image.new("RGB", img.size, random.choice(tints))
+        img = Image.blend(img, overlay, random.uniform(0.03, 0.06))
 
-            # Viñeta suave para legibilidad del texto
-            img = apply_vignette(img, strength=random.uniform(0.10, 0.18))
+        # Viñeta suave para legibilidad
+        img = apply_vignette(img, strength=random.uniform(0.08, 0.14))
 
-            return img
+        # Redimensionar por si Gemini devuelve 1024x1024
+        img = img.resize((w, h), Image.LANCZOS)
 
-        else:
-            print(f"Pollinations status: {response.status_code}")
+        return img
 
     except Exception as e:
-        print(f"Error descargando imagen IA (usando fallback): {e}")
+        print(f"Error Gemini imagen: {e}")
 
-    # Fallback bonito si falla internet
-    base = Image.new("RGB", size, (220, 220, 230))
-    glow = Image.new("RGB", size, (255, 230, 240)).filter(ImageFilter.GaussianBlur(180))
-    img = Image.blend(base, glow, 0.22)
-    img = apply_vignette(img, strength=0.15)
+    # Fallback bonito si falla la API
+    base = Image.new("RGB", size, (232, 229, 239))
+    glow = Image.new("RGB", size, (255, 234, 220)).filter(ImageFilter.GaussianBlur(180))
+    img = Image.blend(base, glow, 0.24)
+    img = apply_vignette(img, strength=0.10)
     return img
 
 
-def wrap_text(draw, text, font, max_width):
+def wrap_text(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont, max_width: int) -> list[str]:
     words = text.split()
-    lines, line = [], []
-    for w in words:
-        if draw.textlength(" ".join(line + [w]), font=font) <= max_width:
-            line.append(w)
+    lines = []
+    line = []
+
+    for word in words:
+        candidate = " ".join(line + [word])
+        if draw.textlength(candidate, font=font) <= max_width:
+            line.append(word)
         else:
-            lines.append(" ".join(line))
-            line = [w]
+            if line:
+                lines.append(" ".join(line))
+            line = [word]
+
     if line:
         lines.append(" ".join(line))
+
     return lines
 
 
-def render_quote_image(quote, theme, handle="@tu_cuenta", out_path=f"{OUT_DIR}/{IMG_NAME}"):
+def render_quote_image(
+    quote: str,
+    theme: str,
+    visual_style: str,
+    handle: str = "@tu_cuenta",
+    out_path: str = f"{OUT_DIR}/{IMG_NAME}",
+) -> None:
     os.makedirs(OUT_DIR, exist_ok=True)
 
-    img = get_ia_background(theme)
+    img = get_ia_background(theme, visual_style)
     draw = ImageDraw.Draw(img)
 
     font_path = "assets/fonts/PlayfairDisplay-Regular.ttf"
-    if not os.path.exists(font_path):
+    if os.path.exists(font_path):
+        quote_font = ImageFont.truetype(font_path, 66)
+        small_font = ImageFont.truetype(font_path, 34)
+    else:
         quote_font = ImageFont.load_default()
         small_font = ImageFont.load_default()
-    else:
-        quote_font = ImageFont.truetype(font_path, 64)
-        small_font = ImageFont.truetype(font_path, 34)
 
-    lines = wrap_text(draw, f"“{quote}”", quote_font, img.size[0] - 240)
+    max_width = img.size[0] - 240
+    lines = wrap_text(draw, f"“{quote}”", quote_font, max_width)
 
-    y = (img.size[1] - (len(lines) * 78)) // 2 - 40
+    line_height = 82
+    block_height = len(lines) * line_height
+    y = (img.size[1] - block_height) // 2 - 30
+
     for line in lines:
         x = (img.size[0] - draw.textlength(line, font=quote_font)) / 2
+        draw.text((x + 2, y + 3), line, font=quote_font, fill=(0, 0, 0))
+        draw.text((x, y), line, font=quote_font, fill=(247, 247, 245))
+        y += line_height
 
-        # sombra suave
-        draw.text((x + 2, y + 2), line, font=quote_font, fill=(0, 0, 0))
-        draw.text((x, y), line, font=quote_font, fill=(245, 245, 245))
-        y += 78
-
-    # handle abajo
     hx = (img.size[0] - draw.textlength(handle, font=small_font)) / 2
-    draw.text((hx, img.size[1] - 140), handle, font=small_font, fill=(200, 200, 200))
+    draw.text((hx, img.size[1] - 130), handle, font=small_font, fill=(220, 220, 220))
 
     img = img.convert("RGB")
     img.save(out_path, "JPEG", quality=92, optimize=True)
 
 
 def main():
-    theme, phrase, caption = generate_ia_content()
+    os.makedirs(OUT_DIR, exist_ok=True)
+
+    theme, phrase, caption, visual_style = generate_ia_content()
     handle = os.environ.get("IG_HANDLE", "@tu_cuenta")
 
-    render_quote_image(phrase, theme, handle=handle)
+    render_quote_image(
+        quote=phrase,
+        theme=theme,
+        visual_style=visual_style,
+        handle=handle,
+        out_path=f"{OUT_DIR}/{IMG_NAME}",
+    )
 
     payload = {
         "date": today_madrid(),
         "theme": theme,
         "phrase": phrase,
         "caption": caption,
+        "visual_style": visual_style,
         "image_path": f"{OUT_DIR}/{IMG_NAME}",
     }
 
     with open(f"{OUT_DIR}/post.json", "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
 
-    print("Post IA Generado con éxito.")
+    print("Post Gemini generado con éxito.")
 
 
 if __name__ == "__main__":
