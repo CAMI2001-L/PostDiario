@@ -1,14 +1,8 @@
 {
   "date": "2026-03-12",
-  "theme": "Boundaries",
-  "phrase": "Establecer límites no es rechazar a otros, es honrarte a ti mismo.",
-  "caption": "Aprender a decir 'no' puede ser un acto de amor propio, pero a menudo se siente como una traición. Nos han enseñado a creer que complacer a los demás es sinónimo de bondad, y que cualquier negativa nos convierte en egoístas. Romper con esa creencia es un camino, no un destino.\n\nEs normal sentir culpa al principio. Esa sensación incómoda es la resistencia de un patrón antiguo que se niega a soltar. Pero, ¿y si esa culpa es solo la antesala de la paz? Tus límites son el perímetro de tu bienestar, el espacio donde tu energía puede florecer sin ser drenada.\n\nCrear fronteras saludables es un acto de valentía y autoconocimiento. Es reconocer que mereces un espacio sagrado para tus emociones, tu tiempo y tu energía. Es una declaración silenciosa de que tu valía no depende de la aprobación externa, sino de tu propia integridad.\n\nReflexiona: ¿dónde necesitas construir un límite hoy para proteger tu paz interior?\n\n#LímitesSanos #BienestarEmocional #Autocuidado #SaludMental #PsicologíaCotidiana #AmorPropio #EnergíaPersonal #RespetoMutuo #EspaciosSeguros #Crecer",
-  "image_prompt_data": {
-    "scene_description": "A lone character gently extends their arm, creating a soft, transparent, yet firm boundary around their personal space. Around them, subtle elements like small, abstract plant shapes or soft light indicate the sacredness of this self-created enclosure. The character stands centered, calm and self-possessed.",
-    "character_style": "simple expressive character, hand-drawn linework, soft imperfect outlines, emotional editorial illustration, minimal facial detail",
-    "composition": "Central composition with the character slightly off-center to allow for text placement on one side. The background is light, with gentle, atmospheric brushstrokes or soft, abstract shapes that complement the main figure without distracting from it. The character is the clear focal point, with ample negative space around them that still feels intentional and part of the illustration.",
-    "palette": "soft desaturated tones, warm beige, muted terracotta, and touches of gentle sage green",
-    "mood": "reflective, quiet, and empowered"
-  },
+  "theme": "Anxiety",
+  "phrase": "Cuando la mente corre, el cuerpo lo siente. No estás solo.",
+  "caption": "Esa ola de inquietud que te arrastra.La ansiedad a menudo se disfraza de urgencia, de que algo terrible va a pasar. Pero en realidad, es una señal de tu sistema nervioso, hipervigilante, intentando protegerte. No es un signo de debilidad, sino de que tu cuerpo y mente están trabajando demasiado.Es agotador vivir en constante alerta. Reconocer esta lucha interna es el primer paso para empezar a comprenderla, y luego, a gestionarla con compasión.Date permiso para pausar. No tienes que arreglarlo todo ahora mismo.#ansiedad #saludmental #bienestaremocional #sobrepensar #autocuidado #compasion #menteencalma #reflexion #psicologia #gestionemocional",
+  "visual_metaphor": "shadow_wave",
   "image_path": "out/post.jpg"
 }
