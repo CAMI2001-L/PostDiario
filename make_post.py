@@ -11,7 +11,7 @@ from google import genai
 from google.genai import types
 
 OUT_DIR = "out"
-IMG_NAME = "latest.jpg"
+IMG_NAME = "post.jpg"
 
 
 def today_madrid() -> str:
