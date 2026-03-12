@@ -6,12 +6,18 @@ from datetime import datetime
 from typing import Any
 
 from dateutil import tz
-from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps, ImageStat
 from google import genai
 from google.genai import types
 
 OUT_DIR = "out"
 IMG_NAME = "post.jpg"
+DEBUG = True
+
+
+def debug(msg: str) -> None:
+    if DEBUG:
+        print(f"[DEBUG] {msg}")
 
 
 def today_madrid() -> str:
@@ -53,8 +59,9 @@ Tu trabajo es crear:
 - una dirección visual para una ILUSTRACIÓN emocional
 
 MUY IMPORTANTE:
-La imagen que acompañará la frase NO debe ser una fotografía realista.
+La imagen NO debe ser una fotografía realista.
 Debe parecer una ilustración emocional tipo cuenta viral de Instagram.
+
 Piensa en:
 - dibujo editorial
 - personaje simple y expresivo
@@ -143,6 +150,8 @@ Reglas:
 
 6) image_prompt_data.composition
 - Debe dejar un área clara para superponer texto.
+- No debe dejar la imagen vacía.
+- La parte más limpia debe seguir teniendo elementos ilustrados sutiles.
 - Debe sentirse como post ilustrado de Instagram.
 - Composición simple pero no vacía.
 - Un personaje principal claro.
@@ -215,15 +224,19 @@ La imagen debe sentirse como una ilustración emocional viral de Instagram.
         )
         content = safe_json_from_response(response)
 
-        return (
-            str(content["theme"]).strip(),
-            str(content["phrase"]).strip(),
-            str(content["caption"]).strip(),
-            content["image_prompt_data"],
-        )
+        theme = str(content["theme"]).strip()
+        phrase = str(content["phrase"]).strip()
+        caption = str(content["caption"]).strip()
+        image_prompt_data = content["image_prompt_data"]
+
+        debug(f"Theme: {theme}")
+        debug(f"Phrase: {phrase}")
+        debug(f"Image prompt data: {json.dumps(image_prompt_data, ensure_ascii=False)}")
+
+        return theme, phrase, caption, image_prompt_data
 
     except Exception as e:
-        print(f"Error Gemini texto: {e}")
+        debug(f"Error Gemini texto: {e}")
         return (
             "overthinking",
             "No todos los silencios son paz; algunos son agotamiento.",
@@ -231,7 +244,7 @@ La imagen debe sentirse como una ilustración emocional viral de Instagram.
             {
                 "scene_description": "A simple hand-drawn character sitting with visible exhaustion, hugging their knees while a dark scribble cloud hangs above their head",
                 "character_style": "emotional editorial illustration, simple expressive character, hand-drawn black outlines, soft imperfect digital drawing, minimal facial detail",
-                "composition": "main character centered slightly low, enough upper area for text, light background with subtle visual texture, Instagram illustrated quote post layout",
+                "composition": "main character in lower half, upper third cleaner but still illustrated with subtle contextual elements, light background with visual texture, Instagram illustrated quote post layout",
                 "palette": "muted blue gray, charcoal, soft desaturated tones",
                 "mood": "tired, overwhelmed, reflective",
             },
@@ -277,6 +290,8 @@ def is_weak_scene(image_prompt_data: dict) -> bool:
         "plain background",
         "abstract background",
         "empty backdrop",
+        "minimal wallpaper",
+        "single color",
     ]
 
     strong_cues = [
@@ -290,6 +305,10 @@ def is_weak_scene(image_prompt_data: dict) -> bool:
         "scribble",
         "cloud",
         "metaphor",
+        "rain",
+        "hourglass",
+        "hugging",
+        "walking",
     ]
 
     if any(term in text for term in weak_terms):
@@ -297,6 +316,26 @@ def is_weak_scene(image_prompt_data: dict) -> bool:
 
     score = sum(1 for cue in strong_cues if cue in text)
     return score < 3
+
+
+def is_visually_flat(img: Image.Image) -> bool:
+    """
+    Detecta imágenes demasiado planas, vacías o con muy poca variación.
+    """
+    small = img.resize((128, 128)).convert("RGB")
+    stat = ImageStat.Stat(small)
+
+    mean_std = sum(stat.stddev) / len(stat.stddev)
+
+    extrema = small.getextrema()
+    mean_range = 0
+    for ch in extrema:
+        mean_range += (ch[1] - ch[0])
+    mean_range /= len(extrema)
+
+    debug(f"Visual flat check -> mean_std={mean_std:.2f}, mean_range={mean_range:.2f}")
+
+    return mean_std < 18 or mean_range < 60
 
 
 def build_image_prompt(theme: str, image_prompt_data: dict) -> str:
@@ -307,11 +346,11 @@ def build_image_prompt(theme: str, image_prompt_data: dict) -> str:
     mood = image_prompt_data["mood"].strip()
 
     return f"""
-Create a square 1:1 emotional illustration with no text, no letters, no typography, no watermark.
+Create a square 1:1 emotional illustration with NO text, NO letters, NO typography, NO watermark.
 
 This must be an illustrated Instagram post background in the style of viral emotional quote accounts.
-Do NOT create a real photograph.
-Do NOT create a cinematic film still.
+It must be an illustrated scene, not a plain background.
+It must contain a clear subject, a visible action or metaphor, and a composition with intention.
 
 Theme:
 {theme}
@@ -334,59 +373,136 @@ Mood:
 Base style:
 emotional editorial illustration, hand-drawn digital art, simple expressive character design, visible black linework, soft imperfect outlines, muted soft colors, slightly textured flat shading, minimal but emotionally strong composition
 
-Important requirements:
+Required visual characteristics:
 - one clear main character or metaphorical subject
-- composition must support overlay text later
-- leave breathing room for quote placement
-- simple background with visual intention, not empty
-- viral Instagram illustrated quote aesthetic
-- emotionally readable at first glance
-- shareable, clean, intimate, slightly melancholic
+- hand-drawn digital illustration
+- visible black outlines
+- soft muted color palette
+- simple but expressive shapes
+- emotional editorial illustration style
+- clear figure-background separation
+- background with contextual illustrated elements, not empty
+- composition must feel like a complete illustrated post, not just a canvas for text
+- upper or side clean areas must still contain subtle illustrated context, never blank color fields
+
+Very important:
+- DO NOT generate a plain color background
+- DO NOT generate an empty beige, gray, brown, or pastel backdrop
+- DO NOT generate a flat gradient
+- DO NOT leave most of the canvas empty
+- DO NOT create a minimalist wallpaper
+- the image must include visual elements beyond the central subject
+- the frame must feel intentionally illustrated, not blank
 
 Strictly avoid:
-realistic photography, analog film look, cinematic realism, flat abstract gradients, plain empty backgrounds, vector corporate style, glossy 3D render, overly detailed realism, text inside image, watermark
+realistic photography, analog film, cinematic still, abstract background, empty background, plain backdrop, poster mockup, typography, watermark, glossy 3D, vector corporate style
 """.strip()
 
 
-def get_ia_background(theme: str, image_prompt_data: dict, size=(1080, 1080)) -> Image.Image:
+def generate_fallback_image(size=(1080, 1080)) -> Image.Image:
+    """
+    Fallback menos horrible que un color plano.
+    No ideal, pero al menos con algo de estructura visual.
+    """
+    w, h = size
+    base = Image.new("RGB", size, (210, 214, 220))
+
+    overlay = Image.new("RGBA", size, (0, 0, 0, 0))
+    d = ImageDraw.Draw(overlay)
+
+    # nube tipo scribble
+    d.ellipse((w * 0.32, h * 0.18, w * 0.68, h * 0.42), fill=(90, 100, 115, 80))
+    d.ellipse((w * 0.25, h * 0.22, w * 0.50, h * 0.40), fill=(90, 100, 115, 80))
+    d.ellipse((w * 0.50, h * 0.22, w * 0.75, h * 0.40), fill=(90, 100, 115, 80))
+
+    # suelo suave
+    d.rectangle((0, h * 0.74, w, h), fill=(180, 186, 192, 120))
+
+    # personaje simple
+    d.ellipse((w * 0.43, h * 0.48, w * 0.57, h * 0.62), fill=(70, 80, 95, 180))
+    d.line((w * 0.50, h * 0.62, w * 0.50, h * 0.78), fill=(50, 58, 70, 200), width=10)
+    d.line((w * 0.50, h * 0.68, w * 0.42, h * 0.74), fill=(50, 58, 70, 200), width=8)
+    d.line((w * 0.50, h * 0.68, w * 0.58, h * 0.74), fill=(50, 58, 70, 200), width=8)
+    d.line((w * 0.50, h * 0.78, w * 0.43, h * 0.88), fill=(50, 58, 70, 200), width=8)
+    d.line((w * 0.50, h * 0.78, w * 0.57, h * 0.88), fill=(50, 58, 70, 200), width=8)
+
+    img = Image.alpha_composite(base.convert("RGBA"), overlay).convert("RGB")
+    img = img.filter(ImageFilter.GaussianBlur(radius=0.6))
+
+    texture = Image.effect_noise(img.size, 10).convert("L")
+    texture = ImageOps.colorize(texture, black=(235, 235, 235), white=(255, 255, 255)).convert("RGB")
+    img = Image.blend(img, texture, 0.05)
+
+    return img
+
+
+def get_ia_background(
+    theme: str,
+    image_prompt_data: dict,
+    size=(1080, 1080),
+    max_attempts: int = 3,
+) -> Image.Image:
     client = get_client()
     w, h = size
     prompt = build_image_prompt(theme, image_prompt_data)
+    last_error = None
 
-    try:
-        response = client.models.generate_content(
-            model="gemini-2.5-flash-image",
-            contents=[prompt],
-            config=types.GenerateContentConfig(
-                image_config=types.ImageConfig(aspect_ratio="1:1")
-            ),
-        )
+    debug("Prompt final para Gemini Image:")
+    debug(prompt)
 
-        img = extract_first_image(response)
+    for attempt in range(1, max_attempts + 1):
+        try:
+            debug(f"Intento de imagen {attempt}/{max_attempts}")
 
-        img = ImageEnhance.Contrast(img).enhance(1.03)
-        img = ImageEnhance.Color(img).enhance(0.96)
-        img = ImageEnhance.Brightness(img).enhance(1.00)
+            response = client.models.generate_content(
+                model="gemini-2.5-flash-image",
+                contents=[prompt],
+                config=types.GenerateContentConfig(
+                    image_config=types.ImageConfig(aspect_ratio="1:1")
+                ),
+            )
 
-        img = img.filter(ImageFilter.GaussianBlur(radius=0.15))
+            img = extract_first_image(response)
+            debug("Gemini devolvió una imagen.")
 
-        texture = Image.effect_noise(img.size, random.uniform(8, 14)).convert("L")
-        texture = ImageOps.colorize(
-            texture, black=(230, 230, 230), white=(255, 255, 255)
-        ).convert("RGB")
-        img = Image.blend(img, texture, 0.05)
+            if is_visually_flat(img):
+                raise RuntimeError("Imagen visualmente plana o vacía.")
 
-        img = img.resize((w, h), Image.LANCZOS)
-        return img
+            img = ImageEnhance.Contrast(img).enhance(1.03)
+            img = ImageEnhance.Color(img).enhance(0.97)
+            img = ImageEnhance.Brightness(img).enhance(1.00)
 
-    except Exception as e:
-        print(f"Error Gemini imagen: {e}")
+            img = img.filter(ImageFilter.GaussianBlur(radius=0.12))
 
-    fallback = Image.new("RGB", size, (205, 210, 214))
-    return fallback
+            texture = Image.effect_noise(img.size, random.uniform(8, 14)).convert("L")
+            texture = ImageOps.colorize(
+                texture, black=(232, 232, 232), white=(255, 255, 255)
+            ).convert("RGB")
+            img = Image.blend(img, texture, 0.04)
+
+            img = img.resize((w, h), Image.LANCZOS)
+
+            if is_visually_flat(img):
+                raise RuntimeError("La imagen siguió demasiado plana tras el postproceso.")
+
+            debug("Imagen aceptada.")
+            return img
+
+        except Exception as e:
+            last_error = e
+            debug(f"Intento fallido: {e}")
+
+    debug(f"Todos los intentos fallaron. Último error: {last_error}")
+    debug("Usando fallback ilustrado.")
+    return generate_fallback_image(size=size)
 
 
-def wrap_text(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont, max_width: int) -> list[str]:
+def wrap_text(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    font: ImageFont.FreeTypeFont,
+    max_width: int
+) -> list[str]:
     words = text.split()
     lines = []
     line = []
@@ -410,13 +526,19 @@ def choose_text_box(image_prompt_data: dict, img_size: tuple[int, int]) -> tuple
     composition = image_prompt_data.get("composition", "").lower()
     w, h = img_size
 
-    if "upper area" in composition or "top" in composition:
-        return w // 2, int(h * 0.22), int(w * 0.72)
+    if "upper" in composition or "top" in composition:
+        return w // 2, int(h * 0.22), int(w * 0.74)
 
-    if "lower area" in composition or "bottom" in composition:
-        return w // 2, int(h * 0.72), int(w * 0.72)
+    if "lower" in composition or "bottom" in composition:
+        return w // 2, int(h * 0.72), int(w * 0.74)
 
-    return w // 2, int(h * 0.22), int(w * 0.72)
+    if "left" in composition:
+        return int(w * 0.35), int(h * 0.25), int(w * 0.50)
+
+    if "right" in composition:
+        return int(w * 0.65), int(h * 0.25), int(w * 0.50)
+
+    return w // 2, int(h * 0.22), int(w * 0.74)
 
 
 def render_quote_image(
@@ -465,7 +587,7 @@ def main():
     theme, phrase, caption, image_prompt_data = generate_ia_content()
 
     if is_weak_scene(image_prompt_data):
-        print("Escena débil detectada, regenerando una vez...")
+        debug("Escena débil detectada, regenerando una vez...")
         theme, phrase, caption, image_prompt_data = generate_ia_content()
 
     handle = os.environ.get("IG_HANDLE", "@tu_cuenta")
