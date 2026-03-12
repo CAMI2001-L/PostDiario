@@ -1,12 +1,12 @@
-import io
 import json
+import math
 import os
 import random
 from datetime import datetime
 from typing import Any
 
 from dateutil import tz
-from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps, ImageStat
+from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 from google import genai
 from google.genai import types
 
@@ -14,6 +14,12 @@ OUT_DIR = "out"
 IMG_NAME = "post.jpg"
 DEBUG = True
 
+CANVAS_SIZE = 1080
+
+
+# =========================
+# Utils
+# =========================
 
 def debug(msg: str) -> None:
     if DEBUG:
@@ -47,142 +53,98 @@ def safe_json_from_response(response: Any) -> dict:
     return json.loads(text)
 
 
-def generate_ia_content() -> tuple[str, str, str, dict]:
+# =========================
+# AI text only
+# =========================
+
+def generate_ia_content() -> tuple[str, str, str, str]:
+    """
+    Devuelve:
+    - theme
+    - phrase
+    - caption
+    - visual_metaphor
+    """
     client = get_client()
 
     prompt = """
 Eres copywriter y director creativo de una cuenta de Instagram de reflexiones psicológicas y emocionales.
 
-Tu trabajo es crear:
+Tu tarea es generar:
 - una frase breve
 - un caption
-- una dirección visual para una ILUSTRACIÓN emocional
+- una metáfora visual simple para una ilustración minimal emocional
 
-MUY IMPORTANTE:
-La imagen NO debe ser una fotografía realista.
-Debe parecer una ilustración emocional tipo cuenta viral de Instagram.
+IMPORTANTE:
+NO debes describir una foto.
+NO debes describir un fondo abstracto.
+NO debes describir una escena cinematográfica.
+Debes elegir una metáfora visual SIMPLE que pueda ilustrarse con un personaje y pocos elementos.
 
-Piensa en:
-- dibujo editorial
-- personaje simple y expresivo
-- ilustración digital con líneas visibles
-- composición limpia pero con intención
-- estética sensible, íntima y compartible
+El estilo visual final será:
+- ilustración emocional minimal
+- personaje simple
+- líneas suaves
+- composición limpia
+- estética viral de cuenta de reflexiones
 
-NO quiero:
-- fotografía analógica
-- cinematic still
-- fondos abstractos vacíos
-- degradados planos
-- fondos de un solo color
-- renders 3D
-- diseño corporativo
-- vector frío
-- stock image
-
-Contexto de la cuenta:
-- psicología cotidiana
-- agotamiento mental
-- ansiedad silenciosa
+Temas de la cuenta:
 - límites
-- duelo emocional
+- ansiedad
+- agotamiento mental
+- duelo
 - autoestima
 - sanar
+- culpa
+- sobrepensar
 - desapego
 
 Tono:
 - íntimo
-- elegante
-- claro
 - humano
-- emocionalmente inteligente
+- claro
+- elegante
 - no cursi
 - no coach barato
-- no pseudoespiritual
 
-Devuelve SOLO JSON válido con esta estructura exacta:
+Devuelve SOLO JSON válido con esta estructura:
 {
   "theme": "...",
   "phrase": "...",
   "caption": "...",
-  "image_prompt_data": {
-    "scene_description": "...",
-    "character_style": "...",
-    "composition": "...",
-    "palette": "...",
-    "mood": "..."
-  }
+  "visual_metaphor": "..."
 }
 
 Reglas:
 
 1) phrase
-- Máximo 14 palabras.
-- Debe ser compartible.
-- Debe sonar humana y emocional.
+- Máximo 12 palabras.
+- Debe sonar humana, compartible y emocional.
 - Evita clichés de autoayuda.
+- Mejor corta que larga.
 
 2) caption
-- Línea 1: hook corto y fuerte.
+- Primera línea: hook corto.
 - Luego 2 a 4 párrafos breves.
-- Validar emoción real.
-- Cerrar con CTA suave.
-- Añadir 8 a 10 hashtags relevantes.
+- Debe validar emoción real.
+- Cierra con CTA suave.
+- Añade 8 a 10 hashtags relevantes.
 
 3) theme
 - Una sola palabra en inglés.
 
-4) image_prompt_data.scene_description
-- Debe describir una escena ilustrable, no una foto.
-- Debe incluir un personaje, acción o metáfora visual clara.
-- Debe encajar con una cuenta viral de frases ilustradas.
-- Buenos tipos de escena:
-  - persona caminando bajo una nube de lluvia
-  - personaje cargando un reloj de arena enorme
-  - persona abrazándose a sí misma
-  - figura sentada con agotamiento
-  - personaje pequeño frente a una emoción grande
-  - metáfora visual simple y potente
+4) visual_metaphor
+Debe ser SOLO una de estas opciones exactas:
+- rain_cloud
+- hourglass
+- self_hug
+- heavy_backpack
+- shadow_wave
+- sitting_scribble
 
-5) image_prompt_data.character_style
-- Describe un estilo de ilustración:
-  simple expressive character, hand-drawn linework, soft imperfect outlines, emotional editorial illustration, minimal facial detail
+Elige la que mejor represente la frase.
 
-6) image_prompt_data.composition
-- Debe dejar un área clara para superponer texto.
-- No debe dejar la imagen vacía.
-- La parte más limpia debe seguir teniendo elementos ilustrados sutiles.
-- Debe sentirse como post ilustrado de Instagram.
-- Composición simple pero no vacía.
-- Un personaje principal claro.
-- Fondo ligero con algo de contexto visual.
-
-7) image_prompt_data.palette
-- Paleta suave, apagada, emocional.
-- Ejemplos:
-  muted blue gray
-  dusty pink and sage
-  warm beige and charcoal
-  soft desaturated tones
-
-8) image_prompt_data.mood
-- Emociones concretas:
-  tired, tender, melancholic, reflective, overwhelmed, healing, quiet, vulnerable
-
-Evitar completamente:
-- realistic photography
-- film photography
-- dramatic cinematic realism
-- abstract gradient background
-- empty plain backdrop
-- detailed realism
-- glossy commercial look
-- 3D render
-- vector corporate style
-- text inside the generated image
-- watermark
-
-La imagen debe sentirse como una ilustración emocional viral de Instagram.
+Devuelve SOLO JSON.
 """.strip()
 
     schema = {
@@ -191,25 +153,19 @@ La imagen debe sentirse como una ilustración emocional viral de Instagram.
             "theme": {"type": "string"},
             "phrase": {"type": "string"},
             "caption": {"type": "string"},
-            "image_prompt_data": {
-                "type": "object",
-                "properties": {
-                    "scene_description": {"type": "string"},
-                    "character_style": {"type": "string"},
-                    "composition": {"type": "string"},
-                    "palette": {"type": "string"},
-                    "mood": {"type": "string"},
-                },
-                "required": [
-                    "scene_description",
-                    "character_style",
-                    "composition",
-                    "palette",
-                    "mood",
+            "visual_metaphor": {
+                "type": "string",
+                "enum": [
+                    "rain_cloud",
+                    "hourglass",
+                    "self_hug",
+                    "heavy_backpack",
+                    "shadow_wave",
+                    "sitting_scribble",
                 ],
             },
         },
-        "required": ["theme", "phrase", "caption", "image_prompt_data"],
+        "required": ["theme", "phrase", "caption", "visual_metaphor"],
     }
 
     try:
@@ -219,7 +175,7 @@ La imagen debe sentirse como una ilustración emocional viral de Instagram.
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
                 response_json_schema=schema,
-                temperature=0.95,
+                temperature=0.9,
             ),
         )
         content = safe_json_from_response(response)
@@ -227,375 +183,409 @@ La imagen debe sentirse como una ilustración emocional viral de Instagram.
         theme = str(content["theme"]).strip()
         phrase = str(content["phrase"]).strip()
         caption = str(content["caption"]).strip()
-        image_prompt_data = content["image_prompt_data"]
+        visual_metaphor = str(content["visual_metaphor"]).strip()
 
-        debug(f"Theme: {theme}")
-        debug(f"Phrase: {phrase}")
-        debug(f"Image prompt data: {json.dumps(image_prompt_data, ensure_ascii=False)}")
+        debug(f"theme={theme}")
+        debug(f"phrase={phrase}")
+        debug(f"visual_metaphor={visual_metaphor}")
 
-        return theme, phrase, caption, image_prompt_data
+        return theme, phrase, caption, visual_metaphor
 
     except Exception as e:
         debug(f"Error Gemini texto: {e}")
         return (
-            "overthinking",
-            "No todos los silencios son paz; algunos son agotamiento.",
-            "A veces no estás en calma.\n\nA veces solo estás demasiado cansada para seguir explicando lo que te duele.\n\nY desde fuera parece silencio, pero por dentro es puro desgaste.\n\nSi esto te encontró hoy, respira un momento. 🤍\n\n#agotamientomental #ansiedad #saludmental #psicologia #reflexiones #cansancioemocional #autocuidado #sanar #limites",
-            {
-                "scene_description": "A simple hand-drawn character sitting with visible exhaustion, hugging their knees while a dark scribble cloud hangs above their head",
-                "character_style": "emotional editorial illustration, simple expressive character, hand-drawn black outlines, soft imperfect digital drawing, minimal facial detail",
-                "composition": "main character in lower half, upper third cleaner but still illustrated with subtle contextual elements, light background with visual texture, Instagram illustrated quote post layout",
-                "palette": "muted blue gray, charcoal, soft desaturated tones",
-                "mood": "tired, overwhelmed, reflective",
-            },
+            "boundaries",
+            "A veces el límite sano es dejar de explicarte.",
+            "No todo necesita una defensa extensa.\n\nA veces insistir en que te entiendan solo te agota más.\n\nPoner un límite también es elegir en qué gastas tu energía.\n\nGuárdalo si hoy necesitas recordarlo. 🤍\n\n#limites #saludmental #psicologia #ansiedad #autocuidado #amorpropio #bienestar #reflexiones #cansancioemocional",
+            "rain_cloud",
         )
 
 
-def extract_first_image(response: Any) -> Image.Image:
-    candidates = getattr(response, "candidates", None)
-    if not candidates:
-        raise RuntimeError("Gemini no devolvió candidates para la imagen.")
+# =========================
+# Visual system
+# =========================
 
-    for candidate in candidates:
-        content = getattr(candidate, "content", None)
-        if not content:
-            continue
-        parts = getattr(content, "parts", None) or []
-        for part in parts:
-            inline_data = getattr(part, "inline_data", None)
-            if inline_data and getattr(inline_data, "data", None):
-                return Image.open(io.BytesIO(inline_data.data)).convert("RGB")
-
-    raise RuntimeError("No se encontró ninguna imagen en la respuesta de Gemini.")
-
-
-def is_weak_scene(image_prompt_data: dict) -> bool:
-    text = " ".join(
-        [
-            image_prompt_data.get("scene_description", ""),
-            image_prompt_data.get("character_style", ""),
-            image_prompt_data.get("composition", ""),
-            image_prompt_data.get("palette", ""),
-            image_prompt_data.get("mood", ""),
-        ]
-    ).lower()
-
-    weak_terms = [
-        "photo",
-        "photograph",
-        "cinematic",
-        "film photography",
-        "realistic photography",
-        "gradient",
-        "plain background",
-        "abstract background",
-        "empty backdrop",
-        "minimal wallpaper",
-        "single color",
-    ]
-
-    strong_cues = [
-        "character",
-        "hand-drawn",
-        "illustration",
-        "outlines",
-        "editorial",
-        "text area",
-        "instagram",
-        "scribble",
-        "cloud",
-        "metaphor",
-        "rain",
-        "hourglass",
-        "hugging",
-        "walking",
-    ]
-
-    if any(term in text for term in weak_terms):
-        return True
-
-    score = sum(1 for cue in strong_cues if cue in text)
-    return score < 3
+PALETTES = {
+    "blue_gray": {
+        "bg": (224, 229, 235),
+        "ground": (204, 211, 219),
+        "line": (86, 96, 110),
+        "accent": (124, 136, 152),
+        "soft": (200, 208, 218),
+        "text": (245, 244, 239),
+        "shadow": (25, 25, 25),
+    },
+    "sage": {
+        "bg": (225, 231, 224),
+        "ground": (207, 215, 206),
+        "line": (90, 102, 92),
+        "accent": (122, 138, 124),
+        "soft": (206, 214, 205),
+        "text": (246, 244, 239),
+        "shadow": (25, 25, 25),
+    },
+    "dusty_pink": {
+        "bg": (233, 223, 225),
+        "ground": (216, 205, 208),
+        "line": (110, 92, 97),
+        "accent": (145, 120, 128),
+        "soft": (223, 214, 217),
+        "text": (246, 244, 239),
+        "shadow": (25, 25, 25),
+    },
+    "beige": {
+        "bg": (229, 224, 215),
+        "ground": (214, 207, 196),
+        "line": (102, 96, 88),
+        "accent": (140, 132, 120),
+        "soft": (220, 214, 205),
+        "text": (246, 244, 239),
+        "shadow": (25, 25, 25),
+    },
+}
 
 
-def is_visually_flat(img: Image.Image) -> bool:
-    """
-    Detecta imágenes demasiado planas, vacías o con muy poca variación.
-    """
-    small = img.resize((128, 128)).convert("RGB")
-    stat = ImageStat.Stat(small)
-
-    mean_std = sum(stat.stddev) / len(stat.stddev)
-
-    extrema = small.getextrema()
-    mean_range = 0
-    for ch in extrema:
-        mean_range += (ch[1] - ch[0])
-    mean_range /= len(extrema)
-
-    debug(f"Visual flat check -> mean_std={mean_std:.2f}, mean_range={mean_range:.2f}")
-
-    return mean_std < 18 or mean_range < 60
+def choose_palette(theme: str, metaphor: str) -> dict:
+    if metaphor in {"rain_cloud", "sitting_scribble", "shadow_wave"}:
+        return PALETTES["blue_gray"]
+    if metaphor == "self_hug":
+        return PALETTES["dusty_pink"]
+    if metaphor == "heavy_backpack":
+        return PALETTES["sage"]
+    if metaphor == "hourglass":
+        return PALETTES["beige"]
+    return PALETTES["blue_gray"]
 
 
-def build_image_prompt(theme: str, image_prompt_data: dict) -> str:
-    scene = image_prompt_data["scene_description"].strip()
-    character_style = image_prompt_data["character_style"].strip()
-    composition = image_prompt_data["composition"].strip()
-    palette = image_prompt_data["palette"].strip()
-    mood = image_prompt_data["mood"].strip()
-
-    return f"""
-Create a square 1:1 emotional illustration with NO text, NO letters, NO typography, NO watermark.
-
-This must be an illustrated Instagram post background in the style of viral emotional quote accounts.
-It must be an illustrated scene, not a plain background.
-It must contain a clear subject, a visible action or metaphor, and a composition with intention.
-
-Theme:
-{theme}
-
-Scene:
-{scene}
-
-Character style:
-{character_style}
-
-Composition:
-{composition}
-
-Palette:
-{palette}
-
-Mood:
-{mood}
-
-Base style:
-emotional editorial illustration, hand-drawn digital art, simple expressive character design, visible black linework, soft imperfect outlines, muted soft colors, slightly textured flat shading, minimal but emotionally strong composition
-
-Required visual characteristics:
-- one clear main character or metaphorical subject
-- hand-drawn digital illustration
-- visible black outlines
-- soft muted color palette
-- simple but expressive shapes
-- emotional editorial illustration style
-- clear figure-background separation
-- background with contextual illustrated elements, not empty
-- composition must feel like a complete illustrated post, not just a canvas for text
-- upper or side clean areas must still contain subtle illustrated context, never blank color fields
-
-Very important:
-- DO NOT generate a plain color background
-- DO NOT generate an empty beige, gray, brown, or pastel backdrop
-- DO NOT generate a flat gradient
-- DO NOT leave most of the canvas empty
-- DO NOT create a minimalist wallpaper
-- the image must include visual elements beyond the central subject
-- the frame must feel intentionally illustrated, not blank
-
-Strictly avoid:
-realistic photography, analog film, cinematic still, abstract background, empty background, plain backdrop, poster mockup, typography, watermark, glossy 3D, vector corporate style
-""".strip()
-
-
-def generate_fallback_image(size=(1080, 1080)) -> Image.Image:
-    """
-    Fallback menos horrible que un color plano.
-    No ideal, pero al menos con algo de estructura visual.
-    """
-    w, h = size
-    base = Image.new("RGB", size, (210, 214, 220))
-
-    overlay = Image.new("RGBA", size, (0, 0, 0, 0))
-    d = ImageDraw.Draw(overlay)
-
-    # nube tipo scribble
-    d.ellipse((w * 0.32, h * 0.18, w * 0.68, h * 0.42), fill=(90, 100, 115, 80))
-    d.ellipse((w * 0.25, h * 0.22, w * 0.50, h * 0.40), fill=(90, 100, 115, 80))
-    d.ellipse((w * 0.50, h * 0.22, w * 0.75, h * 0.40), fill=(90, 100, 115, 80))
+def create_base_canvas(size: int, palette: dict) -> Image.Image:
+    img = Image.new("RGB", (size, size), palette["bg"])
+    draw = ImageDraw.Draw(img)
 
     # suelo suave
-    d.rectangle((0, h * 0.74, w, h), fill=(180, 186, 192, 120))
+    draw.rectangle((0, int(size * 0.74), size, size), fill=palette["ground"])
 
-    # personaje simple
-    d.ellipse((w * 0.43, h * 0.48, w * 0.57, h * 0.62), fill=(70, 80, 95, 180))
-    d.line((w * 0.50, h * 0.62, w * 0.50, h * 0.78), fill=(50, 58, 70, 200), width=10)
-    d.line((w * 0.50, h * 0.68, w * 0.42, h * 0.74), fill=(50, 58, 70, 200), width=8)
-    d.line((w * 0.50, h * 0.68, w * 0.58, h * 0.74), fill=(50, 58, 70, 200), width=8)
-    d.line((w * 0.50, h * 0.78, w * 0.43, h * 0.88), fill=(50, 58, 70, 200), width=8)
-    d.line((w * 0.50, h * 0.78, w * 0.57, h * 0.88), fill=(50, 58, 70, 200), width=8)
-
-    img = Image.alpha_composite(base.convert("RGBA"), overlay).convert("RGB")
-    img = img.filter(ImageFilter.GaussianBlur(radius=0.6))
-
-    texture = Image.effect_noise(img.size, 10).convert("L")
-    texture = ImageOps.colorize(texture, black=(235, 235, 235), white=(255, 255, 255)).convert("RGB")
-    img = Image.blend(img, texture, 0.05)
+    # textura muy sutil
+    noise = Image.effect_noise((size, size), 8).convert("L")
+    noise = ImageOps.colorize(
+        noise,
+        black=tuple(max(0, c - 10) for c in palette["bg"]),
+        white=tuple(min(255, c + 8) for c in palette["bg"]),
+    ).convert("RGB")
+    img = Image.blend(img, noise, 0.05)
 
     return img
 
 
-def get_ia_background(
-    theme: str,
-    image_prompt_data: dict,
-    size=(1080, 1080),
-    max_attempts: int = 3,
-) -> Image.Image:
-    client = get_client()
-    w, h = size
-    prompt = build_image_prompt(theme, image_prompt_data)
-    last_error = None
-
-    debug("Prompt final para Gemini Image:")
-    debug(prompt)
-
-    for attempt in range(1, max_attempts + 1):
-        try:
-            debug(f"Intento de imagen {attempt}/{max_attempts}")
-
-            response = client.models.generate_content(
-                model="gemini-2.5-flash-image",
-                contents=[prompt],
-                config=types.GenerateContentConfig(
-                    image_config=types.ImageConfig(aspect_ratio="1:1")
-                ),
-            )
-
-            img = extract_first_image(response)
-            debug("Gemini devolvió una imagen.")
-
-            if is_visually_flat(img):
-                raise RuntimeError("Imagen visualmente plana o vacía.")
-
-            img = ImageEnhance.Contrast(img).enhance(1.03)
-            img = ImageEnhance.Color(img).enhance(0.97)
-            img = ImageEnhance.Brightness(img).enhance(1.00)
-
-            img = img.filter(ImageFilter.GaussianBlur(radius=0.12))
-
-            texture = Image.effect_noise(img.size, random.uniform(8, 14)).convert("L")
-            texture = ImageOps.colorize(
-                texture, black=(232, 232, 232), white=(255, 255, 255)
-            ).convert("RGB")
-            img = Image.blend(img, texture, 0.04)
-
-            img = img.resize((w, h), Image.LANCZOS)
-
-            if is_visually_flat(img):
-                raise RuntimeError("La imagen siguió demasiado plana tras el postproceso.")
-
-            debug("Imagen aceptada.")
-            return img
-
-        except Exception as e:
-            last_error = e
-            debug(f"Intento fallido: {e}")
-
-    debug(f"Todos los intentos fallaron. Último error: {last_error}")
-    debug("Usando fallback ilustrado.")
-    return generate_fallback_image(size=size)
+def line(draw: ImageDraw.ImageDraw, pts, fill, width=7):
+    draw.line(pts, fill=fill, width=width, joint="curve")
 
 
-def wrap_text(
-    draw: ImageDraw.ImageDraw,
-    text: str,
-    font: ImageFont.FreeTypeFont,
-    max_width: int
-) -> list[str]:
+def circle(draw: ImageDraw.ImageDraw, xy, fill=None, outline=None, width=5):
+    draw.ellipse(xy, fill=fill, outline=outline, width=width)
+
+
+def rounded_rect(draw: ImageDraw.ImageDraw, xy, radius, fill=None, outline=None, width=4):
+    draw.rounded_rectangle(xy, radius=radius, fill=fill, outline=outline, width=width)
+
+
+def draw_cloud(draw: ImageDraw.ImageDraw, cx: int, cy: int, scale: float, fill, outline=None):
+    r1 = int(70 * scale)
+    r2 = int(85 * scale)
+    r3 = int(68 * scale)
+
+    circle(draw, (cx - 130 * scale, cy - 25 * scale, cx - 20 * scale, cy + 70 * scale), fill=fill, outline=outline, width=4)
+    circle(draw, (cx - 55 * scale, cy - 70 * scale, cx + 75 * scale, cy + 65 * scale), fill=fill, outline=outline, width=4)
+    circle(draw, (cx + 35 * scale, cy - 20 * scale, cx + 150 * scale, cy + 70 * scale), fill=fill, outline=outline, width=4)
+    draw.rectangle((cx - 120 * scale, cy + 10 * scale, cx + 115 * scale, cy + 65 * scale), fill=fill)
+
+
+def draw_scribble(draw: ImageDraw.ImageDraw, cx: int, cy: int, radius: int, color, width=6):
+    points = []
+    for i in range(28):
+        ang = (math.pi * 2 / 28) * i
+        rr = radius * (0.65 + 0.35 * random.random())
+        x = cx + rr * math.cos(ang)
+        y = cy + rr * math.sin(ang)
+        points.append((x, y))
+    points.append(points[0])
+    line(draw, points, fill=color, width=width)
+
+
+def draw_stick_person(draw: ImageDraw.ImageDraw, cx: int, base_y: int, scale: float, color):
+    head_r = int(42 * scale)
+    torso = int(120 * scale)
+    arm = int(78 * scale)
+    leg = int(90 * scale)
+
+    circle(draw, (cx - head_r, base_y - torso - head_r * 2, cx + head_r, base_y - torso), fill=None, outline=color, width=7)
+    line(draw, [(cx, base_y - torso), (cx, base_y)], fill=color, width=8)
+    line(draw, [(cx, base_y - torso + 45 * scale), (cx - arm, base_y - torso + 90 * scale)], fill=color, width=7)
+    line(draw, [(cx, base_y - torso + 45 * scale), (cx + arm, base_y - torso + 90 * scale)], fill=color, width=7)
+    line(draw, [(cx, base_y), (cx - leg, base_y + leg)], fill=color, width=7)
+    line(draw, [(cx, base_y), (cx + leg, base_y + leg)], fill=color, width=7)
+
+
+def draw_person_with_backpack(draw: ImageDraw.ImageDraw, cx: int, base_y: int, scale: float, palette: dict):
+    color = palette["line"]
+    accent = palette["accent"]
+    head_r = int(42 * scale)
+
+    circle(draw, (cx - head_r, base_y - 230 * scale, cx + head_r, base_y - 146 * scale), fill=None, outline=color, width=7)
+    line(draw, [(cx, base_y - 146 * scale), (cx, base_y - 20 * scale)], fill=color, width=8)
+    line(draw, [(cx, base_y - 110 * scale), (cx - 75 * scale, base_y - 50 * scale)], fill=color, width=7)
+    line(draw, [(cx, base_y - 110 * scale), (cx + 55 * scale, base_y - 65 * scale)], fill=color, width=7)
+    line(draw, [(cx, base_y - 20 * scale), (cx - 60 * scale, base_y + 80 * scale)], fill=color, width=7)
+    line(draw, [(cx, base_y - 20 * scale), (cx + 60 * scale, base_y + 80 * scale)], fill=color, width=7)
+
+    rounded_rect(
+        draw,
+        (cx + 20 * scale, base_y - 160 * scale, cx + 125 * scale, base_y - 20 * scale),
+        radius=int(16 * scale),
+        fill=None,
+        outline=accent,
+        width=6,
+    )
+
+
+def draw_person_self_hug(draw: ImageDraw.ImageDraw, cx: int, cy: int, scale: float, palette: dict):
+    color = palette["line"]
+    accent = palette["accent"]
+
+    head_r = int(46 * scale)
+    circle(draw, (cx - head_r, cy - 180 * scale, cx + head_r, cy - 88 * scale), fill=None, outline=color, width=7)
+
+    # torso oval
+    circle(draw, (cx - 70 * scale, cy - 90 * scale, cx + 70 * scale, cy + 95 * scale), fill=None, outline=color, width=7)
+
+    # arms hugging
+    line(draw, [(cx - 78 * scale, cy - 35 * scale), (cx - 10 * scale, cy + 20 * scale), (cx + 45 * scale, cy - 5 * scale)], fill=accent, width=8)
+    line(draw, [(cx + 78 * scale, cy - 35 * scale), (cx + 10 * scale, cy + 22 * scale), (cx - 46 * scale, cy - 4 * scale)], fill=accent, width=8)
+
+    # legs
+    line(draw, [(cx - 22 * scale, cy + 90 * scale), (cx - 50 * scale, cy + 165 * scale)], fill=color, width=7)
+    line(draw, [(cx + 22 * scale, cy + 90 * scale), (cx + 50 * scale, cy + 165 * scale)], fill=color, width=7)
+
+
+def draw_hourglass(draw: ImageDraw.ImageDraw, cx: int, cy: int, scale: float, palette: dict):
+    color = palette["line"]
+    accent = palette["accent"]
+
+    w = 180 * scale
+    h = 260 * scale
+
+    # frame
+    line(draw, [(cx - w / 2, cy - h / 2), (cx + w / 2, cy - h / 2)], fill=color, width=8)
+    line(draw, [(cx - w / 2, cy + h / 2), (cx + w / 2, cy + h / 2)], fill=color, width=8)
+    line(draw, [(cx - w / 2 + 15 * scale, cy - h / 2), (cx - w / 2 + 30 * scale, cy + h / 2)], fill=color, width=7)
+    line(draw, [(cx + w / 2 - 15 * scale, cy - h / 2), (cx + w / 2 - 30 * scale, cy + h / 2)], fill=color, width=7)
+
+    # glass
+    line(draw, [(cx - 50 * scale, cy - 85 * scale), (cx + 50 * scale, cy - 85 * scale)], fill=accent, width=5)
+    line(draw, [(cx - 50 * scale, cy + 85 * scale), (cx + 50 * scale, cy + 85 * scale)], fill=accent, width=5)
+    line(draw, [(cx - 50 * scale, cy - 85 * scale), (cx, cy)], fill=accent, width=5)
+    line(draw, [(cx + 50 * scale, cy - 85 * scale), (cx, cy)], fill=accent, width=5)
+    line(draw, [(cx - 50 * scale, cy + 85 * scale), (cx, cy)], fill=accent, width=5)
+    line(draw, [(cx + 50 * scale, cy + 85 * scale), (cx, cy)], fill=accent, width=5)
+
+    # sand
+    draw.polygon(
+        [(cx - 38 * scale, cy - 52 * scale), (cx + 38 * scale, cy - 52 * scale), (cx, cy - 8 * scale)],
+        fill=palette["soft"],
+    )
+    draw.polygon(
+        [(cx - 34 * scale, cy + 60 * scale), (cx + 34 * scale, cy + 60 * scale), (cx, cy + 25 * scale)],
+        fill=palette["soft"],
+    )
+    line(draw, [(cx, cy - 4 * scale), (cx, cy + 20 * scale)], fill=palette["soft"], width=3)
+
+
+def draw_wave(draw: ImageDraw.ImageDraw, size: int, palette: dict):
+    color = palette["soft"]
+    pts = []
+    for x in range(0, size + 1, 30):
+        y = int(675 + 40 * math.sin(x / 90))
+        pts.append((x, y))
+    pts += [(size, size), (0, size)]
+    draw.polygon(pts, fill=color)
+
+
+def render_metaphor_background(size: int, theme: str, metaphor: str) -> Image.Image:
+    palette = choose_palette(theme, metaphor)
+    img = create_base_canvas(size, palette)
+    draw = ImageDraw.Draw(img)
+
+    # decor sutil arriba, para que no quede vacío total
+    for i in range(8):
+        x = random.randint(60, size - 60)
+        y = random.randint(70, 250)
+        draw.arc((x - 24, y - 10, x + 24, y + 10), 15, 165, fill=palette["soft"], width=2)
+
+    if metaphor == "rain_cloud":
+        draw_cloud(draw, cx=size // 2, cy=330, scale=1.25, fill=palette["soft"])
+        for x in [420, 470, 520, 570, 620]:
+            line(draw, [(x, 420), (x - 8, 455)], fill=palette["accent"], width=4)
+        draw_stick_person(draw, cx=size // 2, base_y=805, scale=1.1, color=palette["line"])
+
+    elif metaphor == "hourglass":
+        draw_hourglass(draw, cx=620, cy=705, scale=1.3, palette=palette)
+        # persona empujando
+        draw_person_with_backpack(draw, cx=330, base_y=820, scale=1.05, palette=palette)
+        line(draw, [(395, 690), (510, 660)], fill=palette["line"], width=6)
+
+    elif metaphor == "self_hug":
+        draw_person_self_hug(draw, cx=size // 2, cy=690, scale=1.3, palette=palette)
+        for i in range(6):
+            draw.arc((180 + i * 110, 180, 280 + i * 110, 240), 20, 160, fill=palette["soft"], width=3)
+
+    elif metaphor == "heavy_backpack":
+        draw_person_with_backpack(draw, cx=size // 2, base_y=820, scale=1.25, palette=palette)
+        # piedras simples
+        for i in range(4):
+            circle(draw, (640 + i * 12, 470 + i * 18, 690 + i * 12, 510 + i * 18), outline=palette["accent"], width=4)
+
+    elif metaphor == "shadow_wave":
+        draw_wave(draw, size=size, palette=palette)
+        draw_stick_person(draw, cx=320, base_y=800, scale=1.0, color=palette["line"])
+        # sombra/ola grande
+        draw.polygon(
+            [(650, 760), (860, 430), (980, 760)],
+            outline=palette["accent"],
+            fill=None,
+        )
+        line(draw, [(650, 760), (860, 430), (980, 760)], fill=palette["accent"], width=8)
+
+    elif metaphor == "sitting_scribble":
+        draw_scribble(draw, cx=size // 2, cy=315, radius=95, color=palette["accent"], width=6)
+        # persona sentada
+        circle(draw, (500, 465, 580, 545), fill=None, outline=palette["line"], width=7)
+        line(draw, [(540, 545), (540, 655)], fill=palette["line"], width=8)
+        line(draw, [(540, 585), (485, 635)], fill=palette["line"], width=7)
+        line(draw, [(540, 595), (605, 645)], fill=palette["line"], width=7)
+        line(draw, [(540, 655), (470, 760)], fill=palette["line"], width=7)
+        line(draw, [(540, 655), (620, 760)], fill=palette["line"], width=7)
+
+    else:
+        draw_stick_person(draw, cx=size // 2, base_y=805, scale=1.1, color=palette["line"])
+
+    # textura final
+    img = img.filter(ImageFilter.GaussianBlur(radius=0.2))
+    return img
+
+
+# =========================
+# Text layout
+# =========================
+
+def wrap_text(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont, max_width: int) -> list[str]:
     words = text.split()
     lines = []
-    line = []
+    line_words = []
 
     for word in words:
-        candidate = " ".join(line + [word])
+        candidate = " ".join(line_words + [word])
         if draw.textlength(candidate, font=font) <= max_width:
-            line.append(word)
+            line_words.append(word)
         else:
-            if line:
-                lines.append(" ".join(line))
-            line = [word]
+            if line_words:
+                lines.append(" ".join(line_words))
+            line_words = [word]
 
-    if line:
-        lines.append(" ".join(line))
+    if line_words:
+        lines.append(" ".join(line_words))
 
     return lines
 
 
-def choose_text_box(image_prompt_data: dict, img_size: tuple[int, int]) -> tuple[int, int, int]:
-    composition = image_prompt_data.get("composition", "").lower()
-    w, h = img_size
+def choose_layout(metaphor: str) -> dict:
+    # texto arriba, dibujo abajo: estilo más consistente
+    return {
+        "text_center_x": CANVAS_SIZE // 2,
+        "text_center_y": 210,
+        "text_width": 760,
+        "handle_y": 980,
+    }
 
-    if "upper" in composition or "top" in composition:
-        return w // 2, int(h * 0.22), int(w * 0.74)
 
-    if "lower" in composition or "bottom" in composition:
-        return w // 2, int(h * 0.72), int(w * 0.74)
+def load_fonts():
+    serif_path = "assets/fonts/PlayfairDisplay-Regular.ttf"
+    handle_path = "assets/fonts/PlayfairDisplay-Regular.ttf"
 
-    if "left" in composition:
-        return int(w * 0.35), int(h * 0.25), int(w * 0.50)
+    if os.path.exists(serif_path):
+        quote_font = ImageFont.truetype(serif_path, 56)
+        handle_font = ImageFont.truetype(handle_path, 22)
+    else:
+        quote_font = ImageFont.load_default()
+        handle_font = ImageFont.load_default()
 
-    if "right" in composition:
-        return int(w * 0.65), int(h * 0.25), int(w * 0.50)
+    return quote_font, handle_font
 
-    return w // 2, int(h * 0.22), int(w * 0.74)
 
+def render_text_overlay(
+    img: Image.Image,
+    quote: str,
+    metaphor: str,
+    palette: dict,
+    handle: str,
+) -> Image.Image:
+    draw = ImageDraw.Draw(img)
+    quote_font, handle_font = load_fonts()
+    layout = choose_layout(metaphor)
+
+    quote_text = f"“{quote}”"
+    lines = wrap_text(draw, quote_text, quote_font, layout["text_width"])
+
+    line_height = 72
+    total_h = len(lines) * line_height
+    y = layout["text_center_y"] - total_h // 2
+
+    for line_txt in lines:
+        text_w = draw.textlength(line_txt, font=quote_font)
+        x = layout["text_center_x"] - text_w / 2
+
+        # sombra suave
+        draw.text((x + 2, y + 2), line_txt, font=quote_font, fill=palette["shadow"])
+        draw.text((x, y), line_txt, font=quote_font, fill=palette["text"])
+        y += line_height
+
+    if handle:
+        hw = draw.textlength(handle, font=handle_font)
+        hx = (img.size[0] - hw) / 2
+        draw.text((hx, layout["handle_y"]), handle, font=handle_font, fill=tuple(max(150, c - 20) for c in palette["text"]))
+
+    return img
+
+
+# =========================
+# Main render
+# =========================
 
 def render_quote_image(
     quote: str,
     theme: str,
-    image_prompt_data: dict,
+    visual_metaphor: str,
     handle: str = "@tu_cuenta",
     out_path: str = f"{OUT_DIR}/{IMG_NAME}",
 ) -> None:
     os.makedirs(OUT_DIR, exist_ok=True)
 
-    img = get_ia_background(theme, image_prompt_data)
-    draw = ImageDraw.Draw(img)
-
-    font_path = "assets/fonts/PlayfairDisplay-Regular.ttf"
-    if os.path.exists(font_path):
-        quote_font = ImageFont.truetype(font_path, 74)
-        small_font = ImageFont.truetype(font_path, 28)
-    else:
-        quote_font = ImageFont.load_default()
-        small_font = ImageFont.load_default()
-
-    cx, cy, max_width = choose_text_box(image_prompt_data, img.size)
-    lines = wrap_text(draw, f"“{quote}”", quote_font, max_width)
-
-    line_height = 88
-    block_height = len(lines) * line_height
-    y = cy - block_height // 2
-
-    for line in lines:
-        x = cx - draw.textlength(line, font=quote_font) / 2
-        draw.text((x + 2, y + 2), line, font=quote_font, fill=(0, 0, 0))
-        draw.text((x, y), line, font=quote_font, fill=(245, 245, 240))
-        y += line_height
-
-    hx = (img.size[0] - draw.textlength(handle, font=small_font)) / 2
-    draw.text((hx, img.size[1] - 90), handle, font=small_font, fill=(230, 230, 230))
+    palette = choose_palette(theme, visual_metaphor)
+    img = render_metaphor_background(CANVAS_SIZE, theme, visual_metaphor)
+    img = render_text_overlay(img, quote, visual_metaphor, palette, handle)
 
     img = img.convert("RGB")
-    img.save(out_path, "JPEG", quality=92, optimize=True)
+    img.save(out_path, "JPEG", quality=94, optimize=True)
 
 
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
 
-    theme, phrase, caption, image_prompt_data = generate_ia_content()
-
-    if is_weak_scene(image_prompt_data):
-        debug("Escena débil detectada, regenerando una vez...")
-        theme, phrase, caption, image_prompt_data = generate_ia_content()
-
+    theme, phrase, caption, visual_metaphor = generate_ia_content()
     handle = os.environ.get("IG_HANDLE", "@tu_cuenta")
 
     render_quote_image(
         quote=phrase,
         theme=theme,
-        image_prompt_data=image_prompt_data,
+        visual_metaphor=visual_metaphor,
         handle=handle,
         out_path=f"{OUT_DIR}/{IMG_NAME}",
     )
@@ -605,7 +595,7 @@ def main():
         "theme": theme,
         "phrase": phrase,
         "caption": caption,
-        "image_prompt_data": image_prompt_data,
+        "visual_metaphor": visual_metaphor,
         "image_path": f"{OUT_DIR}/{IMG_NAME}",
     }
 
