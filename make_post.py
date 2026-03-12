@@ -20,22 +20,19 @@ def today_madrid() -> str:
 
 
 def get_client() -> genai.Client:
-    if not os.environ.get("GEMINI_API_KEY"):
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
         raise RuntimeError("Falta GEMINI_API_KEY en variables de entorno.")
-    return genai.Client()
+    return genai.Client(api_key=api_key)
 
 
 def safe_json_from_response(response: Any) -> dict:
-    """
-    Intenta extraer JSON fiable desde response.text.
-    """
     text = getattr(response, "text", None)
     if not text:
         raise RuntimeError("Gemini no devolvió texto para el JSON.")
 
     text = text.strip()
 
-    # Por si viniera envuelto en markdown
     if text.startswith("```"):
         text = text.strip("`")
         if text.lower().startswith("json"):
@@ -103,10 +100,17 @@ Estructura exacta:
 - Ejemplos válidos: healing, solitude, boundaries, overthinking, grief, softness, release, peace
 
 4) visual_style
-- Devuelve una descripción visual breve para generar el fondo.
-- Tiene que ser estética, cinematográfica y útil para una imagen de Instagram.
-- Debe describir solo el fondo, no texto.
-- Ejemplo: "dreamy foggy landscape with soft golden light and blurred flowers"
+- Devuelve una descripción visual MUY específica para generar una fotografía emocional.
+- No describas diseño gráfico ni fondo abstracto.
+- Debe parecer una escena real, cinematográfica o analógica.
+- Tiene que ser una imagen que combine con una frase emocional en Instagram.
+
+Buenos ejemplos:
+- "grainy rabbit portrait in dark soft light with blurred background"
+- "two children by the ocean at dusk seen from indoors, nostalgic film look"
+- "foggy road at sunrise with muted colors and cinematic depth"
+- "close-up white flower in shadow with visible film grain"
+- "woman silhouette by a rainy window, soft low light, vintage mood"
 
 5) style_guardrails
 El contenido debe sonar:
@@ -161,17 +165,14 @@ Devuelve SOLO un JSON válido con estas claves exactas:
     except Exception as e:
         print(f"Error Gemini texto: {e}")
         return (
-            "healing",
-            "No te agotaste por sentir, sino por sostener demasiado tiempo.",
-            "A veces no estás rota.\nEstás cansada.\n\nCansada de sostener, de entender, de esperar que algo cambie mientras tú sigues cargando con todo.\n\nSanar también es dejar de exigirte tanta fortaleza.\n\nGuárdalo para esos días en los que se te olvida tratarte con más ternura. 🤍\n\n#sanar #saludmental #psicologia #amorpropio #ansiedad #bienestar #crecimientopersonal #limites",
-            "dreamy foggy field with soft golden sunrise light and delicate blurred flowers",
+            "grief",
+            "Un día dejará de doler como hoy.",
+            "Hay heridas que no se van de golpe.\n\nPrimero dejan de gritar.\nDespués dejan de vivir en el centro de todo.\nY un día, sin avisar, ya no sostienen tu vida entera.\n\nGuárdalo para cuando sientas que nada cambia, aunque por dentro ya estés avanzando. 🤍\n\n#dueloemocional #sanar #saludmental #psicologia #ansiedad #amorpropio #bienestar #crecimientopersonal",
+            "two children by the ocean at dusk seen from indoors, nostalgic film look",
         )
 
 
 def extract_first_image(response: Any) -> Image.Image:
-    """
-    Extrae la primera imagen inline del response de Gemini.
-    """
     candidates = getattr(response, "candidates", None)
     if not candidates:
         raise RuntimeError("Gemini no devolvió candidates para la imagen.")
@@ -184,28 +185,27 @@ def extract_first_image(response: Any) -> Image.Image:
         for part in parts:
             inline_data = getattr(part, "inline_data", None)
             if inline_data and getattr(inline_data, "data", None):
-                image_bytes = inline_data.data
-                return Image.open(io.BytesIO(image_bytes)).convert("RGB")
+                return Image.open(io.BytesIO(inline_data.data)).convert("RGB")
 
     raise RuntimeError("No se encontró ninguna imagen en la respuesta de Gemini.")
 
 
-def apply_vignette(img: Image.Image, strength: float = 0.12) -> Image.Image:
+def apply_vignette(img: Image.Image, strength: float = 0.08) -> Image.Image:
     """
-    Viñeta suave para mejorar legibilidad del texto sin apagar demasiado el fondo.
+    Viñeta suave para mejorar legibilidad sin destruir el fondo.
     """
     w, h = img.size
     mask = Image.new("L", (w, h), 0)
     draw = ImageDraw.Draw(mask)
 
     draw.ellipse(
-        (-w * 0.10, -h * 0.10, w * 1.10, h * 1.10),
+        (-w * 0.08, -h * 0.08, w * 1.08, h * 1.08),
         fill=255,
     )
-    mask = mask.filter(ImageFilter.GaussianBlur(int(min(w, h) * 0.10)))
+    mask = mask.filter(ImageFilter.GaussianBlur(int(min(w, h) * 0.09)))
     mask = ImageOps.autocontrast(mask)
 
-    dark = Image.new("RGB", (w, h), (10, 10, 12))
+    dark = Image.new("RGB", (w, h), (8, 8, 10))
     darkened = Image.blend(img, dark, strength)
 
     return Image.composite(img, darkened, ImageOps.invert(mask))
@@ -216,24 +216,27 @@ def get_ia_background(theme: str, visual_style: str, size=(1080, 1080)) -> Image
     w, h = size
 
     prompt = f"""
-Create a premium Instagram quote background.
+Create a square photographic background for an emotional Instagram quote.
 
-Square composition, no text, no letters, no typography, no watermark, no words.
-Style: cinematic, aesthetic, elegant, soft depth of field, premium editorial feel.
-Theme: {theme}
-Scene: {visual_style}
+Style:
+analog film photography, cinematic still, realistic, nostalgic, soft blur, visible film grain, emotionally evocative, moody but beautiful.
 
-Requirements:
-- visually rich and beautiful
-- not flat, not plain, not empty
-- suitable for centered white quote text
-- soft light
-- depth, atmosphere, texture
-- premium Instagram aesthetic
-- no people faces
-- no readable text
-- no black empty background
-- no gray empty gradient
+Important:
+this must look like a real photo, not graphic design, not an abstract background, not a plain gradient, not a poster, not minimalist wallpaper.
+
+Scene:
+{visual_style}
+
+Theme:
+{theme}
+
+Visual direction:
+soft natural light or dim ambient light, dreamy atmosphere, depth, texture, imperfect realism, slightly vintage tone.
+
+Avoid:
+text, letters, typography, poster layout, empty backgrounds, plain purple backgrounds, flat gradients, graphic design, vector art, 3D render, isolated objects, minimal studio background.
+
+The image must feel like a poetic photograph someone would save on Instagram.
 """.strip()
 
     try:
@@ -249,45 +252,33 @@ Requirements:
 
         img = extract_first_image(response)
 
-        # Ajustes visuales suaves para feed tipo Instagram
-        img = ImageEnhance.Contrast(img).enhance(1.12)
-        img = ImageEnhance.Color(img).enhance(1.08)
-        img = ImageEnhance.Brightness(img).enhance(1.03)
+        # Look más fotográfico y menos "plano"
+        img = ImageEnhance.Contrast(img).enhance(1.08)
+        img = ImageEnhance.Color(img).enhance(0.96)
+        img = ImageEnhance.Brightness(img).enhance(0.98)
 
-        # Blur muy suave para look más editorial
-        img = img.filter(ImageFilter.GaussianBlur(radius=0.8))
+        # Blur muy leve
+        img = img.filter(ImageFilter.GaussianBlur(radius=0.35))
 
-        # Grain fino tipo film
-        noise = Image.effect_noise(img.size, random.uniform(12, 20)).convert("L")
+        # Grain más visible, tipo foto analógica
+        noise = Image.effect_noise(img.size, random.uniform(18, 28)).convert("L")
         noise = ImageOps.colorize(noise, black=(0, 0, 0), white=(255, 255, 255)).convert("RGB")
-        img = Image.blend(img, noise, 0.04)
+        img = Image.blend(img, noise, 0.08)
 
-        # Overlay muy leve para variar el mood
-        tints = [
-            (255, 228, 220),
-            (221, 233, 255),
-            (223, 242, 231),
-            (255, 239, 212),
-        ]
-        overlay = Image.new("RGB", img.size, random.choice(tints))
-        img = Image.blend(img, overlay, random.uniform(0.03, 0.06))
+        # Viñeta leve solo para ayudar al texto
+        img = apply_vignette(img, strength=random.uniform(0.06, 0.10))
 
-        # Viñeta suave para legibilidad
-        img = apply_vignette(img, strength=random.uniform(0.08, 0.14))
-
-        # Redimensionar por si Gemini devuelve 1024x1024
         img = img.resize((w, h), Image.LANCZOS)
-
         return img
 
     except Exception as e:
         print(f"Error Gemini imagen: {e}")
 
-    # Fallback bonito si falla la API
-    base = Image.new("RGB", size, (232, 229, 239))
-    glow = Image.new("RGB", size, (255, 234, 220)).filter(ImageFilter.GaussianBlur(180))
-    img = Image.blend(base, glow, 0.24)
-    img = apply_vignette(img, strength=0.10)
+    # Fallback más fotográfico y menos morado
+    base = Image.new("RGB", size, (118, 112, 103))
+    light = Image.new("RGB", size, (182, 169, 150)).filter(ImageFilter.GaussianBlur(200))
+    img = Image.blend(base, light, 0.20)
+    img = apply_vignette(img, strength=0.08)
     return img
 
 
@@ -326,12 +317,12 @@ def render_quote_image(
     font_path = "assets/fonts/PlayfairDisplay-Regular.ttf"
     if os.path.exists(font_path):
         quote_font = ImageFont.truetype(font_path, 66)
-        small_font = ImageFont.truetype(font_path, 34)
+        small_font = ImageFont.truetype(font_path, 30)
     else:
         quote_font = ImageFont.load_default()
         small_font = ImageFont.load_default()
 
-    max_width = img.size[0] - 240
+    max_width = img.size[0] - 220
     lines = wrap_text(draw, f"“{quote}”", quote_font, max_width)
 
     line_height = 82
@@ -340,12 +331,14 @@ def render_quote_image(
 
     for line in lines:
         x = (img.size[0] - draw.textlength(line, font=quote_font)) / 2
+
+        # sombra suave
         draw.text((x + 2, y + 3), line, font=quote_font, fill=(0, 0, 0))
-        draw.text((x, y), line, font=quote_font, fill=(247, 247, 245))
+        draw.text((x, y), line, font=quote_font, fill=(246, 246, 242))
         y += line_height
 
     hx = (img.size[0] - draw.textlength(handle, font=small_font)) / 2
-    draw.text((hx, img.size[1] - 130), handle, font=small_font, fill=(220, 220, 220))
+    draw.text((hx, img.size[1] - 120), handle, font=small_font, fill=(225, 225, 225))
 
     img = img.convert("RGB")
     img.save(out_path, "JPEG", quality=92, optimize=True)
