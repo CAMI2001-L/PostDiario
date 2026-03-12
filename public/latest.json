@@ -1,8 +1,14 @@
 {
   "date": "2026-03-12",
-  "theme": "Exhaustion",
-  "phrase": "No todos los silencios son de paz; algunos son de agotamiento.",
-  "caption": "Hay silencios que no calman, agotan.\nNo es la ausencia de ruido lo que siempre nos regala calma. A veces, el mundo exterior puede estar en un profundo mutismo, pero por dentro, el eco de nuestras preocupaciones, pensamientos y responsabilidades grita sin parar. Este silencio interno es una carga, un peso invisible que drena nuestra energía más que cualquier bullicio.\nSe confunde a menudo con la serenidad, pero quienes lo viven saben que es una forma sutil de desgaste. Es la mente que no descansa, que sigue procesando, sanando o luchando, incluso cuando el cuerpo está inmóvil. Es el cansancio que se instala en el alma, disfrazado de quietud.\nSi has sentido que tu \"paz\" en realidad es una tregua agotadora, no estás solo. Es una señal de que necesitas una pausa real, no solo un espacio sin sonido, sino un verdadero descanso mental y emocional.\n¿Reconoces este silencio en tu vida? Date permiso para escucharlo y, sobre todo, para darle la pausa que necesita tu alma.\n#AgotamientoEmocional #AnsiedadSilenciosa #SaludMental #FatigaMental #ConscienciaEmocional #DesgastePsicologico #CansancioDelAlma #ReflexionPersonal #BienestarEmocional",
-  "visual_style": "Dimly lit room, an empty, worn armchair facing a window with soft, diffused light, subtle dust motes in the air, a sense of quiet stillness and weariness, analog photography with a melancholic mood.",
+  "theme": "Unburden",
+  "phrase": "A veces, el amor propio es soltar lo que creíste que era tuyo.",
+  "caption": "El peso de lo que cargamos sin ser nuestro.Hay cargas que, aunque parezcan propias, son el eco de expectativas ajenas, de culpas impuestas o de futuros que nunca fueron nuestros. Las llevamos, a veces por costumbre, otras por un sentido distorsionado de responsabilidad.Reconocer ese peso y decidir no llevarlo más es un acto de valentía. Es entender que tu energía es finita y que mereces invertirla en lo que realmente te nutre, no en lo que te agota.Soltar no es renunciar, es liberar espacio. Es darte permiso para existir con más ligereza, más autenticidad y, sobre todo, más paz.¿Qué carga innecesaria puedes empezar a soltar hoy?#psicologíacotidiana #desapego #amorpropio #saludemocional #bienestar #límitessanos #sanación #reflexión #cargamental #liberación",
+  "image_prompt_data": {
+    "scene_description": "Una persona de espaldas, silueta sutil, de pie frente a una ventana empañada por la lluvia en una habitación antigua y poco iluminada. Sus manos están levemente abiertas, como si acabaran de soltar algo. El reflejo distorsionado de la ciudad húmeda se asoma a través del cristal. La atmósfera es de quietud y un respiro profundo.",
+    "lighting": "Soft gray daylight filtered through wet glass, creating muted reflections and long, gentle shadows that obscure details but highlight the overall form.",
+    "composition": "Close-up on the person from behind, with the wet window filling most of the midground. A blurred, dark wooden windowsill in the foreground. The distant, indistinct city lights through the rain-streaked glass form the background, creating a deep sense of separation and introspection. Ample organic space on the side for text overlay.",
+    "texture": "Analog film grain, subtle halation, soft imperfections on the glass, and a slightly desaturated color palette, giving it a timeless, introspective quality.",
+    "mood": "Melancholic, reflective, quiet, wistful"
+  },
   "image_path": "out/post.jpg"
 }
