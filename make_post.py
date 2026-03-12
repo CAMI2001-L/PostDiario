@@ -11,7 +11,7 @@ from google import genai
 from google.genai import types
 
 OUT_DIR = "out"
-IMG_NAME = "post.jpg"
+IMG_NAME = "latest.jpg"
 
 
 def today_madrid() -> str:
@@ -41,25 +41,30 @@ def safe_json_from_response(response: Any) -> dict:
     return json.loads(text)
 
 
-def generate_ia_content() -> tuple[str, str, str, str]:
+def generate_ia_content() -> tuple[str, str, str, dict]:
     """
     Devuelve:
     - theme
     - phrase
     - caption
-    - visual_style
+    - image_prompt_data (dict)
     """
     client = get_client()
 
     prompt = """
-Eres guionista y copywriter senior de una cuenta de Instagram de reflexiones psicológicas y emocionales.
+Eres guionista y director creativo de una cuenta de Instagram de reflexiones psicológicas y emocionales.
 
 Tu trabajo NO es sonar motivacional genérico.
 Tu trabajo es escribir frases que hagan que la persona piense:
 “Esto describe exactamente lo que estoy sintiendo”.
 
-Objetivo:
-Crear una pieza emocional, honesta, compartible y visualmente potente.
+Además, debes proponer una dirección visual para una imagen que acompañe esa frase.
+
+IMPORTANTE:
+La imagen NO debe ser diseño gráfico.
+La imagen NO debe ser un fondo abstracto.
+La imagen NO debe parecer una plantilla para quotes.
+La imagen debe parecer una fotografía emocional real, cinematográfica, nostálgica y con profundidad visual.
 
 Contexto de la cuenta:
 - Tema general: psicología cotidiana, límites, ansiedad silenciosa, duelo emocional, autoestima, cansancio mental, desapego, sanar.
@@ -96,23 +101,45 @@ Estructura exacta:
 
 3) theme
 - Una sola palabra en inglés.
-- Debe servir para inspirar el fondo visual.
-- Ejemplos válidos: healing, solitude, boundaries, overthinking, grief, softness, release, peace
+- Debe servir para inspirar el universo emocional.
 
-4) visual_style
-- Devuelve una descripción visual MUY específica para generar una fotografía emocional.
-- No describas diseño gráfico ni fondo abstracto.
-- Debe parecer una escena real, cinematográfica o analógica.
-- Tiene que ser una imagen que combine con una frase emocional en Instagram.
+4) image_prompt_data.scene_description
+- Debe describir una escena fotográfica real, no abstracta.
+- Debe incluir un sujeto, lugar o situación concreta.
+- Debe sentirse como una fotografía artística o cinematic still.
+- Debe sugerir historia, atmósfera y contexto.
+- NO debe ser diseño gráfico.
+- NO debe ser fondo minimalista.
+- NO debe ser un color plano.
+- NO debe ser algo tipo wallpaper vacío.
 
-Buenos ejemplos:
-- "grainy rabbit portrait in dark soft light with blurred background"
-- "two children by the ocean at dusk seen from indoors, nostalgic film look"
-- "foggy road at sunrise with muted colors and cinematic depth"
-- "close-up white flower in shadow with visible film grain"
-- "woman silhouette by a rainy window, soft low light, vintage mood"
+5) image_prompt_data.lighting
+- Describe una luz realista y natural.
+- Ejemplos:
+  "soft gray daylight filtered through wet glass"
+  "warm sunset haze with gentle shadow falloff"
+  "foggy dawn light with muted contrast"
+  "soft indoor window light with dust in the air"
 
-5) style_guardrails
+6) image_prompt_data.composition
+- Debe forzar profundidad visual.
+- Debe incluir foreground, midground y background cuando sea posible.
+- Debe dejar algo de espacio orgánico para superponer texto después.
+- No debe sentirse vacío, plano ni simétrico como póster.
+- Debe evitar composiciones gráficas de diseño.
+
+7) image_prompt_data.texture
+- Debe describir imperfección fotográfica real.
+- Ejemplos:
+  "analog film grain, slight blur, soft imperfections"
+  "visible grain, subtle softness, imperfect exposure"
+  "nostalgic photographic texture, natural softness"
+
+8) image_prompt_data.mood
+- Emociones concretas:
+  melancholic, intimate, reflective, tender, lonely, peaceful, quiet, wistful
+
+9) style_guardrails
 El contenido debe sonar:
 - honesto
 - emocionalmente inteligente
@@ -122,12 +149,30 @@ El contenido debe sonar:
 - no influencer motivacional
 - no pseudoespiritual
 
+Evita COMPLETAMENTE en la dirección visual:
+- flat gradients
+- plain color backgrounds
+- minimal wallpaper backgrounds
+- graphic design
+- poster style
+- vector art
+- 3D renders
+- studio isolated objects
+- abstract backdrops
+- empty pastel backgrounds
+
 Devuelve SOLO un JSON válido con estas claves exactas:
 {
   "theme": "...",
   "phrase": "...",
   "caption": "...",
-  "visual_style": "..."
+  "image_prompt_data": {
+    "scene_description": "...",
+    "lighting": "...",
+    "composition": "...",
+    "texture": "...",
+    "mood": "..."
+  }
 }
 """.strip()
 
@@ -137,10 +182,33 @@ Devuelve SOLO un JSON válido con estas claves exactas:
             "theme": {"type": "string"},
             "phrase": {"type": "string"},
             "caption": {"type": "string"},
-            "visual_style": {"type": "string"},
+            "image_prompt_data": {
+                "type": "object",
+                "properties": {
+                    "scene_description": {"type": "string"},
+                    "lighting": {"type": "string"},
+                    "composition": {"type": "string"},
+                    "texture": {"type": "string"},
+                    "mood": {"type": "string"},
+                },
+                "required": [
+                    "scene_description",
+                    "lighting",
+                    "composition",
+                    "texture",
+                    "mood",
+                ],
+                "propertyOrdering": [
+                    "scene_description",
+                    "lighting",
+                    "composition",
+                    "texture",
+                    "mood",
+                ],
+            },
         },
-        "required": ["theme", "phrase", "caption", "visual_style"],
-        "propertyOrdering": ["theme", "phrase", "caption", "visual_style"],
+        "required": ["theme", "phrase", "caption", "image_prompt_data"],
+        "propertyOrdering": ["theme", "phrase", "caption", "image_prompt_data"],
     }
 
     try:
@@ -150,7 +218,7 @@ Devuelve SOLO un JSON válido con estas claves exactas:
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
                 response_json_schema=schema,
-                temperature=0.9,
+                temperature=0.95,
             ),
         )
         content = safe_json_from_response(response)
@@ -158,17 +226,23 @@ Devuelve SOLO un JSON válido con estas claves exactas:
         theme = str(content["theme"]).strip()
         phrase = str(content["phrase"]).strip()
         caption = str(content["caption"]).strip()
-        visual_style = str(content["visual_style"]).strip()
+        image_prompt_data = content["image_prompt_data"]
 
-        return theme, phrase, caption, visual_style
+        return theme, phrase, caption, image_prompt_data
 
     except Exception as e:
         print(f"Error Gemini texto: {e}")
         return (
             "grief",
-            "Un día dejará de doler como hoy.",
-            "Hay heridas que no se van de golpe.\n\nPrimero dejan de gritar.\nDespués dejan de vivir en el centro de todo.\nY un día, sin avisar, ya no sostienen tu vida entera.\n\nGuárdalo para cuando sientas que nada cambia, aunque por dentro ya estés avanzando. 🤍\n\n#dueloemocional #sanar #saludmental #psicologia #ansiedad #amorpropio #bienestar #crecimientopersonal",
-            "two children by the ocean at dusk seen from indoors, nostalgic film look",
+            "A veces sanar también se parece a soltar sin respuesta.",
+            "Hay dolores que no piden soluciones.\n\nSolo piden tiempo, silencio y un lugar seguro donde dejar de fingir que ya pasó.\n\nNo todo lo que te pesa necesita explicación inmediata. A veces solo necesita que te trates con más ternura.\n\nSi hoy estás cansada de sostenerlo todo, quédate aquí un momento. 🤍\n\n#dueloemocional #sanar #saludmental #psicologia #ansiedad #amorpropio #bienestar #reflexiones #cansanciomental",
+            {
+                "scene_description": "Two children quietly looking at the ocean through an old window at dusk from inside a dim room",
+                "lighting": "soft fading dusk light entering through the glass with gentle shadow falloff and a warm nostalgic haze",
+                "composition": "blurred foreground elements near the window, children in the midground, hazy sea horizon in the background, layered depth, organic central breathing space for future text",
+                "texture": "analog film grain, slight blur, imperfect softness, nostalgic photographic texture",
+                "mood": "nostalgic, tender, reflective",
+            },
         )
 
 
@@ -190,10 +264,60 @@ def extract_first_image(response: Any) -> Image.Image:
     raise RuntimeError("No se encontró ninguna imagen en la respuesta de Gemini.")
 
 
+def is_weak_scene(image_prompt_data: dict) -> bool:
+    text = " ".join(
+        [
+            image_prompt_data.get("scene_description", ""),
+            image_prompt_data.get("lighting", ""),
+            image_prompt_data.get("composition", ""),
+            image_prompt_data.get("texture", ""),
+            image_prompt_data.get("mood", ""),
+        ]
+    ).lower()
+
+    weak_terms = [
+        "abstract",
+        "background",
+        "gradient",
+        "minimal",
+        "plain",
+        "wallpaper",
+        "solid color",
+        "clean backdrop",
+        "simple backdrop",
+        "poster",
+        "vector",
+    ]
+
+    strong_cues = [
+        "foreground",
+        "midground",
+        "background",
+        "window",
+        "fog",
+        "rain",
+        "light",
+        "shadow",
+        "room",
+        "road",
+        "ocean",
+        "flower",
+        "glass",
+        "curtain",
+        "haze",
+        "reflection",
+        "dusk",
+        "dawn",
+    ]
+
+    if any(term in text for term in weak_terms):
+        return True
+
+    score = sum(1 for cue in strong_cues if cue in text)
+    return score < 3
+
+
 def apply_vignette(img: Image.Image, strength: float = 0.08) -> Image.Image:
-    """
-    Viñeta suave para mejorar legibilidad sin destruir el fondo.
-    """
     w, h = img.size
     mask = Image.new("L", (w, h), 0)
     draw = ImageDraw.Draw(mask)
@@ -211,33 +335,61 @@ def apply_vignette(img: Image.Image, strength: float = 0.08) -> Image.Image:
     return Image.composite(img, darkened, ImageOps.invert(mask))
 
 
-def get_ia_background(theme: str, visual_style: str, size=(1080, 1080)) -> Image.Image:
-    client = get_client()
-    w, h = size
+def build_image_prompt(theme: str, image_prompt_data: dict) -> str:
+    scene = image_prompt_data["scene_description"].strip()
+    lighting = image_prompt_data["lighting"].strip()
+    composition = image_prompt_data["composition"].strip()
+    texture = image_prompt_data["texture"].strip()
+    mood = image_prompt_data["mood"].strip()
 
-    prompt = f"""
-Create a square photographic background for an emotional Instagram quote.
+    return f"""
+Create a square 1:1 photographic image with no text, no letters, no typography, no watermark.
 
-Style:
-analog film photography, cinematic still, realistic, nostalgic, soft blur, visible film grain, emotionally evocative, moody but beautiful.
-
-Important:
-this must look like a real photo, not graphic design, not an abstract background, not a plain gradient, not a poster, not minimalist wallpaper.
-
-Scene:
-{visual_style}
+Generate a real emotional photographic scene, not a graphic design background.
+This image may later be used for an Instagram quote overlay, but it must first feel like a true photograph with atmosphere, depth, texture, and story.
 
 Theme:
 {theme}
 
-Visual direction:
-soft natural light or dim ambient light, dreamy atmosphere, depth, texture, imperfect realism, slightly vintage tone.
+Scene:
+{scene}
 
-Avoid:
-text, letters, typography, poster layout, empty backgrounds, plain purple backgrounds, flat gradients, graphic design, vector art, 3D render, isolated objects, minimal studio background.
+Lighting:
+{lighting}
 
-The image must feel like a poetic photograph someone would save on Instagram.
+Composition:
+{composition}
+
+Texture:
+{texture}
+
+Mood:
+{mood}
+
+Base visual style:
+analog film photography, cinematic still, nostalgic mood, emotional realism, visible film grain, subtle softness, shallow depth of field, realistic textures, imperfect photographic details, natural light falloff
+
+Important requirements:
+- the frame must feel visually rich and layered
+- include foreground, midground, and background when possible
+- create real environmental depth
+- include one believable light source
+- include one clear environmental context
+- include one visible texture
+- keep the image organic, not empty, not flat
+- the scene must feel lived-in, atmospheric, and emotionally believable
+- leave only subtle organic breathing room for future text overlay, never a blank empty backdrop
+- do not simplify the scene into a soft color field
+
+Strictly avoid:
+text, letters, watermark, poster layout, graphic design, flat gradients, plain color backgrounds, empty wallpaper backgrounds, vector art, 3D renders, isolated studio objects, minimal abstract compositions, overly clean commercial sharpness
 """.strip()
+
+
+def get_ia_background(theme: str, image_prompt_data: dict, size=(1080, 1080)) -> Image.Image:
+    client = get_client()
+    w, h = size
+    prompt = build_image_prompt(theme, image_prompt_data)
 
     try:
         response = client.models.generate_content(
@@ -252,21 +404,19 @@ The image must feel like a poetic photograph someone would save on Instagram.
 
         img = extract_first_image(response)
 
-        # Look más fotográfico y menos "plano"
-        img = ImageEnhance.Contrast(img).enhance(1.08)
-        img = ImageEnhance.Color(img).enhance(0.96)
-        img = ImageEnhance.Brightness(img).enhance(0.98)
+        img = ImageEnhance.Contrast(img).enhance(1.06)
+        img = ImageEnhance.Color(img).enhance(0.95)
+        img = ImageEnhance.Brightness(img).enhance(0.99)
 
-        # Blur muy leve
-        img = img.filter(ImageFilter.GaussianBlur(radius=0.35))
+        img = img.filter(ImageFilter.GaussianBlur(radius=0.25))
 
-        # Grain más visible, tipo foto analógica
-        noise = Image.effect_noise(img.size, random.uniform(18, 28)).convert("L")
-        noise = ImageOps.colorize(noise, black=(0, 0, 0), white=(255, 255, 255)).convert("RGB")
-        img = Image.blend(img, noise, 0.08)
+        noise = Image.effect_noise(img.size, random.uniform(20, 30)).convert("L")
+        noise = ImageOps.colorize(
+            noise, black=(0, 0, 0), white=(255, 255, 255)
+        ).convert("RGB")
+        img = Image.blend(img, noise, 0.06)
 
-        # Viñeta leve solo para ayudar al texto
-        img = apply_vignette(img, strength=random.uniform(0.06, 0.10))
+        img = apply_vignette(img, strength=random.uniform(0.04, 0.08))
 
         img = img.resize((w, h), Image.LANCZOS)
         return img
@@ -274,7 +424,7 @@ The image must feel like a poetic photograph someone would save on Instagram.
     except Exception as e:
         print(f"Error Gemini imagen: {e}")
 
-    # Fallback más fotográfico y menos morado
+    # fallback
     base = Image.new("RGB", size, (118, 112, 103))
     light = Image.new("RGB", size, (182, 169, 150)).filter(ImageFilter.GaussianBlur(200))
     img = Image.blend(base, light, 0.20)
@@ -282,7 +432,12 @@ The image must feel like a poetic photograph someone would save on Instagram.
     return img
 
 
-def wrap_text(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont, max_width: int) -> list[str]:
+def wrap_text(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    font: ImageFont.FreeTypeFont,
+    max_width: int
+) -> list[str]:
     words = text.split()
     lines = []
     line = []
@@ -305,13 +460,13 @@ def wrap_text(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont
 def render_quote_image(
     quote: str,
     theme: str,
-    visual_style: str,
+    image_prompt_data: dict,
     handle: str = "@tu_cuenta",
     out_path: str = f"{OUT_DIR}/{IMG_NAME}",
 ) -> None:
     os.makedirs(OUT_DIR, exist_ok=True)
 
-    img = get_ia_background(theme, visual_style)
+    img = get_ia_background(theme, image_prompt_data)
     draw = ImageDraw.Draw(img)
 
     font_path = "assets/fonts/PlayfairDisplay-Regular.ttf"
@@ -332,7 +487,6 @@ def render_quote_image(
     for line in lines:
         x = (img.size[0] - draw.textlength(line, font=quote_font)) / 2
 
-        # sombra suave
         draw.text((x + 2, y + 3), line, font=quote_font, fill=(0, 0, 0))
         draw.text((x, y), line, font=quote_font, fill=(246, 246, 242))
         y += line_height
@@ -347,13 +501,18 @@ def render_quote_image(
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
 
-    theme, phrase, caption, visual_style = generate_ia_content()
+    theme, phrase, caption, image_prompt_data = generate_ia_content()
+
+    if is_weak_scene(image_prompt_data):
+        print("Escena débil detectada, regenerando una vez...")
+        theme, phrase, caption, image_prompt_data = generate_ia_content()
+
     handle = os.environ.get("IG_HANDLE", "@tu_cuenta")
 
     render_quote_image(
         quote=phrase,
         theme=theme,
-        visual_style=visual_style,
+        image_prompt_data=image_prompt_data,
         handle=handle,
         out_path=f"{OUT_DIR}/{IMG_NAME}",
     )
@@ -363,7 +522,7 @@ def main():
         "theme": theme,
         "phrase": phrase,
         "caption": caption,
-        "visual_style": visual_style,
+        "image_prompt_data": image_prompt_data,
         "image_path": f"{OUT_DIR}/{IMG_NAME}",
     }
 
@@ -371,6 +530,7 @@ def main():
         json.dump(payload, f, ensure_ascii=False, indent=2)
 
     print("Post Gemini generado con éxito.")
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":
