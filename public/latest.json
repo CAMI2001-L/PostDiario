@@ -1,14 +1,14 @@
 {
   "date": "2026-03-12",
   "theme": "Boundaries",
-  "phrase": "A veces el límite sano es no explicarte más.",
-  "caption": "¿Cuántas veces has sentido que el aire se agota intentando que otros entiendan tu paz?\n\nHay un punto donde la necesidad de validar tus decisiones con explicaciones se convierte en una carga. No es tu deber justificar cada elección o cada sentimiento para que encaje en el molde ajeno.\n\nProteger tu energía implica reconocer cuándo una conversación ya no es un diálogo, sino un intento de justificación que solo te drena. Tu verdad no necesita ser aprobada para ser válida.\n\nPermítete el silencio. Permítete la distancia. Tu paz interior es un tesoro que no debería depender de la comprensión externa.\n\n¿En qué áreas de tu vida necesitas darte permiso para no explicarte más?\n\n#LímitesSanos #Autocuidado #PazMental #SilencioInterior #SaludEmocional #NoTeJustifiques #EnergíaPersonal #DesgasteEmocional #ReflexiónDiaria #Autoconocimiento",
+  "phrase": "Establecer límites no es rechazar, es honrar tu espacio y tu energía.",
+  "caption": "A veces, decir \"no\" es la forma más honesta de decir \"sí\" a ti. El agotamiento silencioso a menudo se esconde detrás de un \"sí\" constante, incluso cuando todo en nuestro interior grita lo contrario. Aprender a establecer límites claros no es un acto de egoísmo, sino de profundo autoconocimiento y respeto por nuestra propia capacidad y bienestar. Es reconocer que tu energía y tu tiempo son finitos, y que tienes derecho a protegerlos. No necesitas justificaciones elaboradas para cuidar tu espacio. Permítete priorizarte sin culpa. Esta es una invitación a escuchar esa voz interna que te pide un respiro, a confiar en tu intuición cuando te indica que algo es demasiado, y a actuar en consecuencia, con gentileza pero con firmeza. ¿Qué pequeño límite puedes establecer hoy para honrarte a ti mismo? #SaludMental #LímitesSanos #BienestarEmocional #Autocuidado #RespetoPropio #PsicologíaCotidiana #Sanar #Desapego #InteligenciaEmocional #Consciencia",
   "image_prompt_data": {
-    "scene_description": "A lone figure, seen from behind, sits on a worn wooden bench under a large, old tree in an empty park after a light rain. Their shoulders are slightly slumped, and they gaze reflectively at the damp ground in front of them, suggesting a moment of quiet introspection.",
-    "lighting": "Soft, diffused gray daylight filtered through a canopy of wet leaves, creating a muted, even illumination with subtle, gentle shadows.",
-    "composition": "The figure and bench are placed off-center in the midground. The wet ground with scattered fallen leaves forms a soft foreground. Tall, out-of-focus trees and distant, blurred park elements establish a deep background, providing ample, organic space in the upper part of the frame for text.",
-    "texture": "Fine analog film grain, slight atmospheric haze, and a natural, slightly desaturated color rendition, evoking a sense of nostalgic realism and quietude.",
-    "mood": "Reflective, quiet, melancholic"
+    "scene_description": "A simple, gentle character sitting peacefully inside a translucent, soft-glowing bubble or an invisible, personal shield. Blurred, friendly-looking hands or elements subtly reach towards the boundary from the outside, respecting the invisible barrier.",
+    "character_style": "simple expressive character, hand-drawn linework, soft imperfect outlines, emotional editorial illustration, minimal facial detail",
+    "composition": "Central composition with the character and their protective space slightly off-center to allow text overlay on one side. The background is light, suggesting a calm, undefined interior or exterior, with subtle hints of gentle interaction.",
+    "palette": "Soft desaturated tones with a dominant muted teal and warm beige, accented by a hint of dusty rose for tenderness.",
+    "mood": "Quiet, reflective, tender, protective, vulnerable yet strong"
   },
   "image_path": "out/post.jpg"
 }
