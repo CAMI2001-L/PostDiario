@@ -1,14 +1,14 @@
 {
   "date": "2026-03-12",
-  "theme": "Unburden",
-  "phrase": "A veces, el amor propio es soltar lo que creíste que era tuyo.",
-  "caption": "El peso de lo que cargamos sin ser nuestro.Hay cargas que, aunque parezcan propias, son el eco de expectativas ajenas, de culpas impuestas o de futuros que nunca fueron nuestros. Las llevamos, a veces por costumbre, otras por un sentido distorsionado de responsabilidad.Reconocer ese peso y decidir no llevarlo más es un acto de valentía. Es entender que tu energía es finita y que mereces invertirla en lo que realmente te nutre, no en lo que te agota.Soltar no es renunciar, es liberar espacio. Es darte permiso para existir con más ligereza, más autenticidad y, sobre todo, más paz.¿Qué carga innecesaria puedes empezar a soltar hoy?#psicologíacotidiana #desapego #amorpropio #saludemocional #bienestar #límitessanos #sanación #reflexión #cargamental #liberación",
+  "theme": "Boundaries",
+  "phrase": "A veces el límite sano es no explicarte más.",
+  "caption": "¿Cuántas veces has sentido que el aire se agota intentando que otros entiendan tu paz?\n\nHay un punto donde la necesidad de validar tus decisiones con explicaciones se convierte en una carga. No es tu deber justificar cada elección o cada sentimiento para que encaje en el molde ajeno.\n\nProteger tu energía implica reconocer cuándo una conversación ya no es un diálogo, sino un intento de justificación que solo te drena. Tu verdad no necesita ser aprobada para ser válida.\n\nPermítete el silencio. Permítete la distancia. Tu paz interior es un tesoro que no debería depender de la comprensión externa.\n\n¿En qué áreas de tu vida necesitas darte permiso para no explicarte más?\n\n#LímitesSanos #Autocuidado #PazMental #SilencioInterior #SaludEmocional #NoTeJustifiques #EnergíaPersonal #DesgasteEmocional #ReflexiónDiaria #Autoconocimiento",
   "image_prompt_data": {
-    "scene_description": "Una persona de espaldas, silueta sutil, de pie frente a una ventana empañada por la lluvia en una habitación antigua y poco iluminada. Sus manos están levemente abiertas, como si acabaran de soltar algo. El reflejo distorsionado de la ciudad húmeda se asoma a través del cristal. La atmósfera es de quietud y un respiro profundo.",
-    "lighting": "Soft gray daylight filtered through wet glass, creating muted reflections and long, gentle shadows that obscure details but highlight the overall form.",
-    "composition": "Close-up on the person from behind, with the wet window filling most of the midground. A blurred, dark wooden windowsill in the foreground. The distant, indistinct city lights through the rain-streaked glass form the background, creating a deep sense of separation and introspection. Ample organic space on the side for text overlay.",
-    "texture": "Analog film grain, subtle halation, soft imperfections on the glass, and a slightly desaturated color palette, giving it a timeless, introspective quality.",
-    "mood": "Melancholic, reflective, quiet, wistful"
+    "scene_description": "A lone figure, seen from behind, sits on a worn wooden bench under a large, old tree in an empty park after a light rain. Their shoulders are slightly slumped, and they gaze reflectively at the damp ground in front of them, suggesting a moment of quiet introspection.",
+    "lighting": "Soft, diffused gray daylight filtered through a canopy of wet leaves, creating a muted, even illumination with subtle, gentle shadows.",
+    "composition": "The figure and bench are placed off-center in the midground. The wet ground with scattered fallen leaves forms a soft foreground. Tall, out-of-focus trees and distant, blurred park elements establish a deep background, providing ample, organic space in the upper part of the frame for text.",
+    "texture": "Fine analog film grain, slight atmospheric haze, and a natural, slightly desaturated color rendition, evoking a sense of nostalgic realism and quietude.",
+    "mood": "Reflective, quiet, melancholic"
   },
   "image_path": "out/post.jpg"
 }
