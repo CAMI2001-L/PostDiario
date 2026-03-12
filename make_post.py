@@ -212,14 +212,7 @@ Theme:
 Main visual scene:
 {scene_prompt}
 
-Main character requirements:
-- always a young woman
-- dark brown almost black hair
-- wearing a dress
-- simple but pretty illustrated style
-- soft clean outlines
-- visually appealing, not childish, not ugly, not crude
-- consistent Instagram illustration aesthetic
+
 
 Style:
 soft emotional Instagram illustration, hand-drawn digital art, clean outlines, soft muted pastel palette, elegant simple character design, polished minimal illustration, expressive but clean, cute and tasteful
