@@ -2,9 +2,11 @@ import io
 import json
 import os
 import shutil
+import time
 from datetime import datetime
 from typing import Any
 
+import requests
 from dateutil import tz
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 from google import genai
@@ -49,24 +51,6 @@ def safe_json_from_response(response: Any) -> dict:
     return json.loads(text)
 
 
-def extract_first_image(response: Any) -> Image.Image:
-    candidates = getattr(response, "candidates", None)
-    if not candidates:
-        raise RuntimeError("Gemini no devolvió candidates para la imagen.")
-
-    for candidate in candidates:
-        content = getattr(candidate, "content", None)
-        if not content:
-            continue
-        parts = getattr(content, "parts", None) or []
-        for part in parts:
-            inline_data = getattr(part, "inline_data", None)
-            if inline_data and getattr(inline_data, "data", None):
-                return Image.open(io.BytesIO(inline_data.data)).convert("RGB")
-
-    raise RuntimeError("No se encontró ninguna imagen en la respuesta de Gemini.")
-
-
 def generate_ia_content() -> tuple[str, str, str, str]:
     """
     Devuelve:
@@ -90,11 +74,12 @@ La imagen NO debe ser una fotografía.
 La imagen NO debe ser un fondo abstracto.
 La imagen debe ser una ilustración emocional bonita para Instagram.
 
-La protagonista visual SIEMPRE debe ser:
-- una chica joven
-- pelo castaño oscuro casi negro
-- vestido
-- estilo dibujo simple bonito, limpio, emocional, tipo cuentas virales de reflexiones
+La protagonista visual debe ser:
+- una persona joven
+- rasgos simples o faceless
+- estilo dibujo limpio, bonito, emocional, tipo cuentas virales de reflexiones
+- ropa casual cozy (sudadera, pantalón cómodo, calcetines o descalza)
+- estética lofi / calm / cozy
 
 Debes devolver SOLO JSON válido con esta estructura exacta:
 {
@@ -105,7 +90,6 @@ Debes devolver SOLO JSON válido con esta estructura exacta:
 }
 
 Reglas:
-
 1) phrase
 - Máximo 10 palabras.
 - Debe sonar humana, emocional y compartible.
@@ -124,18 +108,18 @@ Reglas:
 
 4) scene_prompt
 - Debe describir una escena ilustrada relacionada con la frase.
-- Debe incluir SIEMPRE a la chica descrita.
+- Debe incluir SIEMPRE a la persona descrita.
 - Debe ser visualmente clara y bonita.
 - Debe poder funcionar en un post cuadrado de Instagram.
 - Debe evitar fondos vacíos o de un solo color.
 - Debe incluir uno o dos elementos visuales relacionados con la emoción.
 
 Buenos ejemplos de scene_prompt:
-- "a young woman with dark brown almost black hair and a dress standing under a small rain cloud while the rest of the sky is calm"
-- "a young woman with dark brown almost black hair and a dress hugging herself softly while small tangled scribbles float above her head"
-- "a young woman with dark brown almost black hair and a dress walking while carrying a backpack made of stones as a metaphor for emotional weight"
-- "a young woman with dark brown almost black hair and a dress sitting quietly while a large soft wave shape rises behind her as a metaphor for overwhelming thoughts"
-- "a young woman with dark brown almost black hair and a dress beside a large hourglass as a metaphor for time and healing"
+- "a young person with dark messy hair lying on the floor writing in a notebook, wearing an oversized cozy hoodie, headphones nearby, tea cup, books, soft purple room, emotional pastel illustration"
+- "a young person hugging themselves softly while small tangled scribbles float above their head in a cozy bedroom"
+- "a young person walking while carrying an oversized backpack made of stones as a metaphor for emotional weight"
+- "a young person sitting quietly while a large soft wave shape rises behind them as a metaphor for overwhelming thoughts"
+- "a young person beside a large hourglass as a metaphor for time and healing, warm pastel illustration"
 
 Evitar completamente:
 - photography
@@ -194,141 +178,223 @@ Devuelve SOLO JSON.
         return (
             "boundaries",
             "A veces poner límites también es quererte.",
-            "No todo límite nace desde el rechazo.\n\nMuchos nacen desde el cansancio de seguir dándote por completo donde ya no hay cuidado.\n\nPoner distancia no siempre es frialdad. A veces es respeto por tu paz.\n\nGuárdalo si hoy necesitas recordarlo. 🤍\n\n#limites #saludmental #psicologia #autocuidado #amorpropio #bienestar #reflexiones #ansiedad #sanar",
-            "a young woman with dark brown almost black hair and a dress standing under a small rain cloud while the rest of the sky is calm, soft emotional Instagram illustration, clean composition, subtle contextual elements, not empty background",
+            "No todo límite nace desde el rechazo.\n\n"
+            "Muchos nacen desde el cansancio de seguir dándote por completo donde ya no hay cuidado.\n\n"
+            "Poner distancia no siempre es frialdad.\n"
+            "A veces es respeto por tu paz.\n\n"
+            "Guárdalo si hoy necesitas recordarlo.\n\n"
+            "#limites #saludmental #psicologia #autocuidado #amorpropio #bienestar #reflexiones #ansiedad #sanar",
+            "a young person with dark messy hair standing under a small rain cloud while the rest of the room is calm, soft emotional pastel illustration, cozy composition, subtle contextual elements, not empty background",
         )
 
 
-def build_image_prompt(theme: str, scene_prompt: str) -> str:
-    return f"""
+def get_ai_horde_headers() -> dict:
+    api_key = os.environ.get("AI_HORDE_API_KEY", "0000000000")
+    client_name = os.environ.get(
+        "AI_HORDE_CLIENT",
+        "PostDiario:1.0:https://github.com/CAMI2001-L/PostDiario",
+    )
+    return {
+        "apikey": api_key,
+        "Client-Agent": client_name,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+
+
+def build_ai_horde_prompt(theme: str, scene_prompt: str) -> str:
+    positive = f"""
 Create a square 1:1 digital illustration with NO text, NO letters, NO typography, NO watermark.
 
 This must look like a polished emotional Instagram illustration, not a photograph.
-The illustration should be aesthetically pleasing, soft, expressive, and shareable.
 
-Theme:
-{theme}
-
-Main visual scene:
-{scene_prompt}
-
-
+Theme: {theme}
+Main visual scene: {scene_prompt}
 
 Style:
-soft emotional Instagram illustration, hand-drawn digital art, clean outlines, soft muted pastel palette, elegant simple character design, polished minimal illustration, expressive but clean, cute and tasteful
+soft emotional Instagram illustration,
+hand-drawn digital art,
+clean outlines,
+soft muted pastel palette,
+cozy lo-fi mood,
+cute tasteful character design,
+faceless or minimally detailed face,
+simple but polished composition,
+shareable social media illustration
 
 Composition:
-- centered or slightly lower character placement
-- room for quote overlay in upper half
+- character centered or slightly lower
+- leave clean space in the upper half for quote overlay
 - background should be simple but not empty
 - include gentle contextual elements related to the emotion
 - visually balanced
-- must feel like a finished illustrated post, not just a canvas
+- finished illustrated post look
 
 Very important:
-- DO NOT generate a plain solid background
-- DO NOT generate a single-color empty backdrop
-- DO NOT generate a flat gradient only
-- DO NOT generate a stick figure
-- DO NOT generate a rough doodle
-- DO NOT generate a bad sketch
-- DO NOT generate a placeholder-looking drawing
-- DO NOT generate an ugly face
-- DO NOT generate text inside the image
-
-Avoid:
-photography, realistic photo, cinematic still, 3D render, vector corporate style, empty background, abstract color field, watermark, typography
+- NOT a photo
+- NOT realistic
+- NOT a plain solid background
+- NOT a flat gradient only
+- NOT a stick figure
+- NOT a rough doodle
+- NOT an ugly sketch
 """.strip()
+
+    negative = """
+photography, realistic photo, photorealistic, cinematic still,
+3d render, vector corporate style, glossy render,
+detailed realistic face, detailed eyes, extra fingers, extra limbs,
+text, letters, typography, watermark, logo,
+empty background, plain background, abstract gradient, flat gradient only,
+messy composition, clutter, ugly sketch, stick figure, bad anatomy
+""".strip()
+
+    return f"{positive} ### {negative}"
+
+
+def request_ai_horde_image(theme: str, scene_prompt: str) -> str:
+    prompt = build_ai_horde_prompt(theme, scene_prompt)
+
+    payload = {
+        "prompt": prompt,
+        "params": {
+            "width": 1024,
+            "height": 1024,
+            "steps": 24,
+            "cfg_scale": 7,
+            "sampler_name": "k_euler_a",
+            "n": 1,
+        },
+        "nsfw": False,
+        "trusted_workers": False,
+        "slow_workers": True,
+        "censor_nsfw": True,
+        "models": ["DreamShaper XL"],
+    }
+
+    r = requests.post(
+        "https://aihorde.net/api/v2/generate/async",
+        headers=get_ai_horde_headers(),
+        json=payload,
+        timeout=60,
+    )
+    r.raise_for_status()
+
+    data = r.json()
+    req_id = data.get("id")
+
+    if not req_id:
+        raise RuntimeError(f"AI Horde no devolvió id: {data}")
+
+    return req_id
+
+
+def poll_ai_horde_image(request_id: str, max_wait_seconds: int = 180) -> str:
+    start = time.time()
+
+    while time.time() - start < max_wait_seconds:
+        r = requests.get(
+            f"https://aihorde.net/api/v2/generate/check/{request_id}",
+            headers=get_ai_horde_headers(),
+            timeout=30,
+        )
+        r.raise_for_status()
+        status = r.json()
+
+        if status.get("done") is True:
+            r2 = requests.get(
+                f"https://aihorde.net/api/v2/generate/status/{request_id}",
+                headers=get_ai_horde_headers(),
+                timeout=30,
+            )
+            r2.raise_for_status()
+            final_data = r2.json()
+
+            generations = final_data.get("generations") or []
+            if not generations:
+                raise RuntimeError(f"AI Horde terminó sin imágenes: {final_data}")
+
+            img_url = generations[0].get("img")
+            if not img_url:
+                raise RuntimeError(f"AI Horde no devolvió URL de imagen: {final_data}")
+
+            return img_url
+
+        time.sleep(4)
+
+    raise TimeoutError("AI Horde tardó demasiado en generar la imagen.")
+
+
+def download_image_as_pil(url: str) -> Image.Image:
+    r = requests.get(url, timeout=120)
+    r.raise_for_status()
+    return Image.open(io.BytesIO(r.content)).convert("RGB")
 
 
 def generate_fallback_image(size=(1080, 1080)) -> Image.Image:
     """
-    Fallback simple pero decente si Gemini Image falla.
+    Fallback simple pero decente si AI Horde falla.
     """
-    img = Image.new("RGB", size, (228, 232, 237))
+    img = Image.new("RGB", size, (212, 192, 214))
     draw = ImageDraw.Draw(img)
 
-    draw.rectangle((0, int(size[1] * 0.76), size[0], size[1]), fill=(208, 213, 220))
+    # suelo
+    draw.rectangle((0, int(size[1] * 0.78), size[0], size[1]), fill=(216, 202, 190))
 
-    # nube suave
-    draw.ellipse((360, 220, 700, 370), fill=(198, 205, 214))
-    draw.ellipse((430, 180, 610, 340), fill=(198, 205, 214))
-
-    # lluvia
-    for x in range(420, 660, 35):
-        draw.line((x, 365, x - 10, 405), fill=(145, 153, 164), width=4)
-
-    # chica simple, menos horrible que un monigote
-    cx = 540
-    base = 830
-
+    # personaje simple acostado escribiendo
     # cabeza
-    draw.ellipse((cx - 42, base - 225, cx + 42, base - 141), fill=(236, 220, 205), outline=(90, 96, 108), width=4)
+    draw.ellipse((420, 540, 520, 640), fill=(236, 220, 205), outline=(60, 52, 70), width=3)
     # pelo
-    draw.ellipse((cx - 48, base - 235, cx + 48, base - 150), fill=(38, 35, 35))
-    # cuello
-    draw.line((cx, base - 142, cx, base - 125), fill=(90, 96, 108), width=4)
-    # vestido
-    draw.polygon(
-        [(cx - 55, base - 125), (cx + 55, base - 125), (cx + 35, base - 30), (cx - 35, base - 30)],
-        fill=(83, 88, 101),
-        outline=(90, 96, 108),
-    )
-    # brazos
-    draw.line((cx - 10, base - 105, cx - 72, base - 60), fill=(90, 96, 108), width=5)
-    draw.line((cx + 10, base - 105, cx + 72, base - 60), fill=(90, 96, 108), width=5)
-    # piernas
-    draw.line((cx - 12, base - 30, cx - 42, base + 55), fill=(90, 96, 108), width=5)
-    draw.line((cx + 12, base - 30, cx + 42, base + 55), fill=(90, 96, 108), width=5)
+    draw.ellipse((405, 520, 530, 620), fill=(25, 20, 30))
+    # cuerpo sudadera
+    draw.rounded_rectangle((470, 590, 760, 760), radius=40, fill=(72, 56, 102), outline=(52, 40, 75), width=3)
+    # brazo
+    draw.line((500, 680, 390, 760), fill=(72, 56, 102), width=18)
+    draw.line((390, 760, 345, 810), fill=(236, 220, 205), width=10)
+    # pierna
+    draw.line((710, 720, 860, 640), fill=(55, 47, 83), width=22)
+    draw.line((860, 640, 920, 590), fill=(236, 220, 205), width=12)
+
+    # libreta
+    draw.rounded_rectangle((280, 780, 440, 860), radius=8, fill=(245, 245, 242), outline=(50, 50, 50), width=3)
+    # té
+    draw.ellipse((720, 800, 810, 835), fill=(120, 85, 90))
+    draw.rectangle((735, 740, 795, 810), fill=(160, 115, 120))
 
     img = img.filter(ImageFilter.GaussianBlur(0.3))
     return img
 
 
-def get_ia_background(theme: str, scene_prompt: str, size=(1080, 1080), max_attempts: int = 3) -> Image.Image:
-    client = get_client()
-    prompt = build_image_prompt(theme, scene_prompt)
-    last_error = None
+def get_ia_background(theme: str, scene_prompt: str, size=(1080, 1080)) -> Image.Image:
+    try:
+        debug("Solicitando imagen a AI Horde...")
+        req_id = request_ai_horde_image(theme, scene_prompt)
+        debug(f"Request ID: {req_id}")
 
-    debug("Prompt de imagen:")
-    debug(prompt)
+        img_url = poll_ai_horde_image(req_id, max_wait_seconds=180)
+        debug(f"Imagen lista: {img_url}")
 
-    for attempt in range(1, max_attempts + 1):
-        try:
-            debug(f"Intento imagen {attempt}/{max_attempts}")
+        img = download_image_as_pil(img_url)
+        img = ImageEnhance.Contrast(img).enhance(1.02)
+        img = ImageEnhance.Color(img).enhance(0.98)
+        img = ImageEnhance.Brightness(img).enhance(1.00)
+        img = img.filter(ImageFilter.GaussianBlur(radius=0.15))
+        img = img.resize(size, Image.LANCZOS)
 
-            response = client.models.generate_content(
-                model="gemini-2.5-flash-image",
-                contents=[prompt],
-                config=types.GenerateContentConfig(
-                    image_config=types.ImageConfig(
-                        aspect_ratio="1:1",
-                    )
-                ),
-            )
+        return img
 
-            img = extract_first_image(response)
-
-            # Ajustes sutiles
-            img = ImageEnhance.Contrast(img).enhance(1.02)
-            img = ImageEnhance.Color(img).enhance(0.98)
-            img = ImageEnhance.Brightness(img).enhance(1.00)
-            img = img.filter(ImageFilter.GaussianBlur(radius=0.15))
-            img = img.resize(size, Image.LANCZOS)
-
-            debug("Imagen generada correctamente.")
-            return img
-
-        except Exception as e:
-            last_error = e
-            debug(f"Fallo en generación de imagen: {e}")
-
-    debug(f"Todos los intentos fallaron. Último error: {last_error}")
-    debug("Usando fallback.")
-    return generate_fallback_image(size=size)
+    except Exception as e:
+        debug(f"Fallo AI Horde: {e}")
+        debug("Usando fallback.")
+        return generate_fallback_image(size=size)
 
 
-def wrap_text(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont, max_width: int) -> list[str]:
+def wrap_text(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    font: ImageFont.FreeTypeFont,
+    max_width: int,
+) -> list[str]:
     words = text.split()
     lines = []
     line = []
@@ -350,8 +416,8 @@ def wrap_text(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont
 
 def draw_quote_text(img: Image.Image, phrase: str, handle: str) -> Image.Image:
     draw = ImageDraw.Draw(img)
-
     font_path = "assets/fonts/PlayfairDisplay-Regular.ttf"
+
     if os.path.exists(font_path):
         quote_font = ImageFont.truetype(font_path, 58)
         handle_font = ImageFont.truetype(font_path, 24)
@@ -387,7 +453,6 @@ def render_quote_image(
     out_path: str = f"{OUT_DIR}/{IMG_NAME}",
 ) -> None:
     os.makedirs(OUT_DIR, exist_ok=True)
-
     img = get_ia_background(theme, scene_prompt, size=(CANVAS_SIZE, CANVAS_SIZE))
     img = draw_quote_text(img, quote, handle)
     img = img.convert("RGB")
@@ -421,7 +486,6 @@ def main():
     with open(f"{OUT_DIR}/post.json", "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
 
-    # MUY IMPORTANTE: copiar a public para publicar la imagen NUEVA
     shutil.copyfile(f"{OUT_DIR}/{IMG_NAME}", f"{PUBLIC_DIR}/latest.jpg")
 
     with open(f"{PUBLIC_DIR}/latest.json", "w", encoding="utf-8") as f:
