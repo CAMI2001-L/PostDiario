@@ -204,49 +204,36 @@ def get_ai_horde_headers() -> dict:
 
 def build_ai_horde_prompt(theme: str, scene_prompt: str) -> str:
     positive = f"""
-Create a square 1:1 digital illustration with NO text, NO letters, NO typography, NO watermark.
+lofi aesthetic illustration, cozy emotional scene, soft pastel colors, purple tones,
+beautiful digital drawing, instagram illustration style, pinterest style,
+clean soft shading, soft lighting, smooth lines, high quality artwork,
 
-This must look like a polished emotional Instagram illustration, not a photograph.
+subject: {scene_prompt},
 
-Theme: {theme}
-Main visual scene: {scene_prompt}
+character:
+young person, soft features, faceless or minimal face,
+wearing oversized hoodie, relaxed pose, cozy environment,
 
-Style:
-soft emotional Instagram illustration,
-hand-drawn digital art,
-clean outlines,
-soft muted pastel palette,
-cozy lo-fi mood,
-cute tasteful character design,
-faceless or minimally detailed face,
-simple but polished composition,
-shareable social media illustration
+composition:
+balanced composition, not empty background,
+with small aesthetic objects (books, tea, plants, room elements),
 
-Composition:
-- character centered or slightly lower
-- leave clean space in the upper half for quote overlay
-- background should be simple but not empty
-- include gentle contextual elements related to the emotion
-- visually balanced
-- finished illustrated post look
+style references:
+lofi illustration, cozy art, modern instagram mental health illustration,
 
-Very important:
-- NOT a photo
-- NOT realistic
-- NOT a plain solid background
-- NOT a flat gradient only
-- NOT a stick figure
-- NOT a rough doodle
-- NOT an ugly sketch
+very important:
+NOT simple drawing,
+NOT stick figure,
+NOT vector icon,
+NOT flat basic shapes,
+NOT minimal ugly drawing,
 """.strip()
 
     negative = """
-photography, realistic photo, photorealistic, cinematic still,
-3d render, vector corporate style, glossy render,
-detailed realistic face, detailed eyes, extra fingers, extra limbs,
-text, letters, typography, watermark, logo,
-empty background, plain background, abstract gradient, flat gradient only,
-messy composition, clutter, ugly sketch, stick figure, bad anatomy
+ugly, bad drawing, low quality, stick figure, vector icon, flat design,
+clipart, simple shapes, child drawing, bad anatomy, deformed,
+text, watermark, logo, letters,
+photorealistic, 3d render, realistic photo
 """.strip()
 
     return f"{positive} ### {negative}"
@@ -260,8 +247,8 @@ def request_ai_horde_image(theme: str, scene_prompt: str) -> str:
         "params": {
             "width": 1024,
             "height": 1024,
-            "steps": 24,
-            "cfg_scale": 7,
+            "steps": 35,
+            "cfg_scale": 8.6,
             "sampler_name": "k_euler_a",
             "n": 1,
         },
@@ -269,7 +256,7 @@ def request_ai_horde_image(theme: str, scene_prompt: str) -> str:
         "trusted_workers": False,
         "slow_workers": True,
         "censor_nsfw": True,
-        "models": ["DreamShaper XL"],
+        "models": ["Deliberate", "DreamShaper"],
     }
 
     r = requests.post(
