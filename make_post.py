@@ -9,6 +9,7 @@ from typing import Any
 import requests
 from dateutil import tz
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
+
 from google import genai
 from google.genai import types
 
@@ -40,14 +41,11 @@ def safe_json_from_response(response: Any) -> dict:
     text = getattr(response, "text", None)
     if not text:
         raise RuntimeError("Gemini no devolvió texto para el JSON.")
-
     text = text.strip()
-
     if text.startswith("```"):
         text = text.strip("`")
         if text.lower().startswith("json"):
             text = text[4:].strip()
-
     return json.loads(text)
 
 
@@ -90,6 +88,7 @@ Debes devolver SOLO JSON válido con esta estructura exacta:
 }
 
 Reglas:
+
 1) phrase
 - Máximo 10 palabras.
 - Debe sonar humana, emocional y compartible.
@@ -113,26 +112,12 @@ Reglas:
 - Debe poder funcionar en un post cuadrado de Instagram.
 - Debe evitar fondos vacíos o de un solo color.
 - Debe incluir uno o dos elementos visuales relacionados con la emoción.
+- Debe terminar SIEMPRE con: "soft pastel illustration, instagram art style, NOT photography, NOT realistic, high quality digital art"
 
 Buenos ejemplos de scene_prompt:
-- "a young person with dark messy hair lying on the floor writing in a notebook, wearing an oversized cozy hoodie, headphones nearby, tea cup, books, soft purple room, emotional pastel illustration"
-- "a young person hugging themselves softly while small tangled scribbles float above their head in a cozy bedroom"
-- "a young person walking while carrying an oversized backpack made of stones as a metaphor for emotional weight"
-- "a young person sitting quietly while a large soft wave shape rises behind them as a metaphor for overwhelming thoughts"
-- "a young person beside a large hourglass as a metaphor for time and healing, warm pastel illustration"
-
-Evitar completamente:
-- photography
-- realistic photo
-- cinematic still
-- plain background
-- abstract gradient
-- empty backdrop
-- stick figure
-- ugly sketch
-- rough doodle
-- text inside image
-- watermark
+- "a young person with dark messy hair lying on the floor writing in a notebook, wearing an oversized cozy hoodie, headphones nearby, tea cup, books, soft purple room, emotional pastel illustration, instagram art style, NOT photography, NOT realistic, high quality digital art"
+- "a young person hugging themselves softly while small tangled scribbles float above their head in a cozy bedroom, soft pastel illustration, instagram art style, NOT photography, NOT realistic, high quality digital art"
+- "a young person sitting quietly while a large soft wave shape rises behind them as a metaphor for overwhelming thoughts, soft pastel illustration, instagram art style, NOT photography, NOT realistic, high quality digital art"
 
 Devuelve SOLO JSON.
 """.strip()
@@ -159,9 +144,7 @@ Devuelve SOLO JSON.
                 temperature=0.9,
             ),
         )
-
         content = safe_json_from_response(response)
-
         theme = str(content["theme"]).strip()
         phrase = str(content["phrase"]).strip()
         caption = str(content["caption"]).strip()
@@ -184,197 +167,136 @@ Devuelve SOLO JSON.
             "A veces es respeto por tu paz.\n\n"
             "Guárdalo si hoy necesitas recordarlo.\n\n"
             "#limites #saludmental #psicologia #autocuidado #amorpropio #bienestar #reflexiones #ansiedad #sanar",
-            "a young person with dark messy hair standing under a small rain cloud while the rest of the room is calm, soft emotional pastel illustration, cozy composition, subtle contextual elements, not empty background",
+            "a young person with dark messy hair standing in a cozy room, soft light coming through curtains, wearing an oversized hoodie, small plants nearby, peaceful expression, soft pastel illustration, instagram art style, NOT photography, NOT realistic, high quality digital art",
         )
 
 
-def get_ai_horde_headers() -> dict:
-    api_key = os.environ.get("AI_HORDE_API_KEY", "0000000000")
-    client_name = os.environ.get(
-        "AI_HORDE_CLIENT",
-        "PostDiario:1.0:https://github.com/CAMI2001-L/PostDiario",
-    )
-    return {
-        "apikey": api_key,
-        "Client-Agent": client_name,
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
+# ---------------------------------------------------------------------------
+# GENERACIÓN DE IMAGEN CON GEMINI IMAGEN
+# ---------------------------------------------------------------------------
 
-
-def build_ai_horde_prompt(theme: str, scene_prompt: str) -> str:
-    positive = f"""
-lofi aesthetic illustration, cozy emotional scene, soft pastel colors, purple tones,
-beautiful digital drawing, instagram illustration style, pinterest style,
-clean soft shading, soft lighting, smooth lines, high quality artwork,
-
-subject: {scene_prompt},
-
-character:
-young person, soft features, faceless or minimal face,
-wearing oversized hoodie, relaxed pose, cozy environment,
-
-composition:
-balanced composition, not empty background,
-with small aesthetic objects (books, tea, plants, room elements),
-
-style references:
-lofi illustration, cozy art, modern instagram mental health illustration,
-
-very important:
-NOT simple drawing,
-NOT stick figure,
-NOT vector icon,
-NOT flat basic shapes,
-NOT minimal ugly drawing,
-""".strip()
-
-    negative = """
-ugly, bad drawing, low quality, stick figure, vector icon, flat design,
-clipart, simple shapes, child drawing, bad anatomy, deformed,
-text, watermark, logo, letters,
-photorealistic, 3d render, realistic photo
-""".strip()
-
-    return f"{positive} ### {negative}"
-
-
-def request_ai_horde_image(theme: str, scene_prompt: str) -> str:
-    prompt = build_ai_horde_prompt(theme, scene_prompt)
-
-    payload = {
-        "prompt": prompt,
-        "params": {
-            "width": 1024,
-            "height": 1024,
-            "steps": 35,
-            "cfg_scale": 8.6,
-            "sampler_name": "k_euler_a",
-            "n": 1,
-        },
-        "nsfw": False,
-        "trusted_workers": False,
-        "slow_workers": True,
-        "censor_nsfw": True,
-        "models": ["Deliberate", "DreamShaper"],
-    }
-
-    r = requests.post(
-        "https://aihorde.net/api/v2/generate/async",
-        headers=get_ai_horde_headers(),
-        json=payload,
-        timeout=60,
-    )
-    r.raise_for_status()
-
-    data = r.json()
-    req_id = data.get("id")
-
-    if not req_id:
-        raise RuntimeError(f"AI Horde no devolvió id: {data}")
-
-    return req_id
-
-
-def poll_ai_horde_image(request_id: str, max_wait_seconds: int = 180) -> str:
-    start = time.time()
-
-    while time.time() - start < max_wait_seconds:
-        r = requests.get(
-            f"https://aihorde.net/api/v2/generate/check/{request_id}",
-            headers=get_ai_horde_headers(),
-            timeout=30,
-        )
-        r.raise_for_status()
-        status = r.json()
-
-        if status.get("done") is True:
-            r2 = requests.get(
-                f"https://aihorde.net/api/v2/generate/status/{request_id}",
-                headers=get_ai_horde_headers(),
-                timeout=30,
-            )
-            r2.raise_for_status()
-            final_data = r2.json()
-
-            generations = final_data.get("generations") or []
-            if not generations:
-                raise RuntimeError(f"AI Horde terminó sin imágenes: {final_data}")
-
-            img_url = generations[0].get("img")
-            if not img_url:
-                raise RuntimeError(f"AI Horde no devolvió URL de imagen: {final_data}")
-
-            return img_url
-
-        time.sleep(4)
-
-    raise TimeoutError("AI Horde tardó demasiado en generar la imagen.")
-
-
-def download_image_as_pil(url: str) -> Image.Image:
-    r = requests.get(url, timeout=120)
-    r.raise_for_status()
-    return Image.open(io.BytesIO(r.content)).convert("RGB")
-
-
-def generate_fallback_image(size=(1080, 1080)) -> Image.Image:
+def get_gemini_image(scene_prompt: str, size=(1080, 1080)) -> Image.Image:
     """
-    Fallback simple pero decente si AI Horde falla.
+    Genera la imagen usando Gemini Imagen (mismo GEMINI_API_KEY que ya tienes).
+    Modelo: imagen-3.0-generate-002
+    Cuota gratuita: suficiente para uso diario automatizado.
     """
-    img = Image.new("RGB", size, (212, 192, 214))
-    draw = ImageDraw.Draw(img)
+    client = get_client()
 
-    # suelo
-    draw.rectangle((0, int(size[1] * 0.78), size[0], size[1]), fill=(216, 202, 190))
+    # Prompt reforzado para estilo ilustración
+    full_prompt = (
+        f"{scene_prompt}, "
+        "soft pastel color palette, cozy lofi aesthetic, clean smooth lines, "
+        "emotional digital illustration, pinterest art style, "
+        "instagram mental health illustration, high quality, "
+        "no text, no watermark, no letters"
+    )
 
-    # personaje simple acostado escribiendo
-    # cabeza
-    draw.ellipse((420, 540, 520, 640), fill=(236, 220, 205), outline=(60, 52, 70), width=3)
-    # pelo
-    draw.ellipse((405, 520, 530, 620), fill=(25, 20, 30))
-    # cuerpo sudadera
-    draw.rounded_rectangle((470, 590, 760, 760), radius=40, fill=(72, 56, 102), outline=(52, 40, 75), width=3)
-    # brazo
-    draw.line((500, 680, 390, 760), fill=(72, 56, 102), width=18)
-    draw.line((390, 760, 345, 810), fill=(236, 220, 205), width=10)
-    # pierna
-    draw.line((710, 720, 860, 640), fill=(55, 47, 83), width=22)
-    draw.line((860, 640, 920, 590), fill=(236, 220, 205), width=12)
+    debug(f"Solicitando imagen a Gemini Imagen...")
+    debug(f"Prompt: {full_prompt[:120]}...")
 
-    # libreta
-    draw.rounded_rectangle((280, 780, 440, 860), radius=8, fill=(245, 245, 242), outline=(50, 50, 50), width=3)
-    # té
-    draw.ellipse((720, 800, 810, 835), fill=(120, 85, 90))
-    draw.rectangle((735, 740, 795, 810), fill=(160, 115, 120))
-
-    img = img.filter(ImageFilter.GaussianBlur(0.3))
-    return img
-
-
-def get_ia_background(theme: str, scene_prompt: str, size=(1080, 1080)) -> Image.Image:
     try:
-        debug("Solicitando imagen a AI Horde...")
-        req_id = request_ai_horde_image(theme, scene_prompt)
-        debug(f"Request ID: {req_id}")
+        response = client.models.generate_images(
+            model="imagen-3.0-generate-002",
+            prompt=full_prompt,
+            config=types.GenerateImagesConfig(
+                number_of_images=1,
+                aspect_ratio="1:1",
+                safety_filter_level="block_only_high",
+                person_generation="allow_adult",
+            ),
+        )
 
-        img_url = poll_ai_horde_image(req_id, max_wait_seconds=180)
-        debug(f"Imagen lista: {img_url}")
+        if not response.generated_images:
+            raise RuntimeError("Gemini Imagen no devolvió imágenes.")
 
-        img = download_image_as_pil(img_url)
-        img = ImageEnhance.Contrast(img).enhance(1.02)
-        img = ImageEnhance.Color(img).enhance(0.98)
-        img = ImageEnhance.Brightness(img).enhance(1.00)
-        img = img.filter(ImageFilter.GaussianBlur(radius=0.15))
+        img_bytes = response.generated_images[0].image.image_bytes
+        debug("Imagen generada correctamente con Gemini Imagen ✓")
+
+        img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+
+        # Leve mejora de color para posts de Instagram
+        img = ImageEnhance.Contrast(img).enhance(1.05)
+        img = ImageEnhance.Color(img).enhance(1.08)
+        img = ImageEnhance.Brightness(img).enhance(1.02)
+        img = img.filter(ImageFilter.GaussianBlur(radius=0.2))
         img = img.resize(size, Image.LANCZOS)
 
         return img
 
     except Exception as e:
-        debug(f"Fallo AI Horde: {e}")
-        debug("Usando fallback.")
+        debug(f"Error Gemini Imagen: {e}")
+        debug("Usando imagen de fallback.")
         return generate_fallback_image(size=size)
 
+
+def generate_fallback_image(size=(1080, 1080)) -> Image.Image:
+    """
+    Fallback mejorado con gradiente y composición más cuidada.
+    Solo se usa si Gemini Imagen falla.
+    """
+    img = Image.new("RGB", size, (200, 185, 215))
+    draw = ImageDraw.Draw(img)
+
+    # Fondo con gradiente suave simulado por capas
+    for i in range(size[1]):
+        ratio = i / size[1]
+        r = int(200 + (225 - 200) * ratio)
+        g = int(185 + (210 - 185) * ratio)
+        b = int(215 + (200 - 215) * ratio)
+        draw.line([(0, i), (size[0], i)], fill=(r, g, b))
+
+    # Suelo
+    draw.ellipse(
+        (100, int(size[1] * 0.72), size[0] - 100, int(size[1] * 0.88)),
+        fill=(210, 195, 180),
+    )
+
+    # Sombra persona
+    draw.ellipse((380, 820, 700, 870), fill=(185, 170, 155))
+
+    # Cuerpo sudadera
+    draw.rounded_rectangle((420, 560, 680, 820), radius=50, fill=(90, 70, 130))
+
+    # Cabeza
+    draw.ellipse((460, 440, 590, 570), fill=(235, 210, 195))
+
+    # Pelo
+    draw.ellipse((448, 425, 598, 535), fill=(35, 25, 45))
+    draw.ellipse((448, 425, 530, 490), fill=(35, 25, 45))
+
+    # Brazo izquierdo extendido (leyendo)
+    draw.rounded_rectangle((310, 640, 440, 680), radius=20, fill=(90, 70, 130))
+    draw.ellipse((290, 630, 330, 695), fill=(235, 210, 195))
+
+    # Libro / libreta
+    draw.rounded_rectangle((150, 640, 310, 790), radius=10, fill=(248, 240, 230))
+    draw.line([(230, 640), (230, 790)], fill=(200, 185, 170), width=2)
+    draw.line([(165, 680), (225, 680)], fill=(180, 170, 155), width=2)
+    draw.line([(165, 710), (225, 710)], fill=(180, 170, 155), width=2)
+    draw.line([(165, 740), (225, 740)], fill=(180, 170, 155), width=2)
+
+    # Taza de té (derecha)
+    draw.rounded_rectangle((700, 720, 800, 800), radius=8, fill=(160, 120, 110))
+    draw.ellipse((700, 710, 800, 735), fill=(175, 135, 125))
+    draw.line([(800, 745), (830, 745), (830, 770), (800, 770)], fill=(130, 95, 85), width=4)
+    # Vaporcito
+    for xi, offset in [(725, 0), (755, 5), (785, 0)]:
+        draw.line([(xi, 710), (xi + offset, 688), (xi, 666)], fill=(220, 215, 225), width=2)
+
+    # Planta pequeña derecha
+    draw.rectangle((840, 820, 860, 870), fill=(100, 80, 60))
+    draw.ellipse((800, 750, 900, 835), fill=(100, 155, 100))
+    draw.ellipse((820, 730, 880, 800), fill=(120, 175, 115))
+
+    # Blur suave para aspecto más cuidado
+    img = img.filter(ImageFilter.GaussianBlur(radius=0.5))
+    return img
+
+
+# ---------------------------------------------------------------------------
+# TEXTO SOBRE LA IMAGEN
+# ---------------------------------------------------------------------------
 
 def wrap_text(
     draw: ImageDraw.ImageDraw,
@@ -385,7 +307,6 @@ def wrap_text(
     words = text.split()
     lines = []
     line = []
-
     for word in words:
         candidate = " ".join(line + [word])
         if draw.textlength(candidate, font=font) <= max_width:
@@ -394,17 +315,16 @@ def wrap_text(
             if line:
                 lines.append(" ".join(line))
             line = [word]
-
     if line:
         lines.append(" ".join(line))
-
     return lines
 
 
 def draw_quote_text(img: Image.Image, phrase: str, handle: str) -> Image.Image:
     draw = ImageDraw.Draw(img)
-    font_path = "assets/fonts/PlayfairDisplay-Regular.ttf"
+    w, h = img.size
 
+    font_path = "assets/fonts/PlayfairDisplay-Regular.ttf"
     if os.path.exists(font_path):
         quote_font = ImageFont.truetype(font_path, 58)
         handle_font = ImageFont.truetype(font_path, 24)
@@ -412,38 +332,64 @@ def draw_quote_text(img: Image.Image, phrase: str, handle: str) -> Image.Image:
         quote_font = ImageFont.load_default()
         handle_font = ImageFont.load_default()
 
-    max_width = img.size[0] - 260
-    lines = wrap_text(draw, f"“{phrase}”", quote_font, max_width)
-
-    line_height = 70
+    max_width = w - 260
+    lines = wrap_text(draw, f"\u201c{phrase}\u201d", quote_font, max_width)
+    line_height = 72
     block_height = len(lines) * line_height
-    y = 165 - block_height // 2
 
+    # Fondo semitransparente detrás del texto para legibilidad
+    padding = 24
+    text_area_top = 140
+    text_area_bottom = text_area_top + block_height + padding * 2
+
+    overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    overlay_draw = ImageDraw.Draw(overlay)
+    overlay_draw.rounded_rectangle(
+        [80, text_area_top - padding, w - 80, text_area_bottom],
+        radius=18,
+        fill=(0, 0, 0, 75),
+    )
+    img = img.convert("RGBA")
+    img = Image.alpha_composite(img, overlay)
+    img = img.convert("RGB")
+    draw = ImageDraw.Draw(img)
+
+    # Texto de la frase
+    y = text_area_top
     for line in lines:
-        x = (img.size[0] - draw.textlength(line, font=quote_font)) / 2
-        draw.text((x + 2, y + 2), line, font=quote_font, fill=(0, 0, 0))
-        draw.text((x, y), line, font=quote_font, fill=(245, 244, 239))
+        x = (w - draw.textlength(line, font=quote_font)) / 2
+        # Sombra
+        draw.text((x + 2, y + 2), line, font=quote_font, fill=(0, 0, 0, 120) if hasattr(draw, "alpha_composite") else (0, 0, 0))
+        # Texto principal
+        draw.text((x, y), line, font=quote_font, fill=(250, 247, 240))
         y += line_height
 
+    # Handle en la parte inferior
     if handle:
-        hx = (img.size[0] - draw.textlength(handle, font=handle_font)) / 2
-        draw.text((hx, img.size[1] - 92), handle, font=handle_font, fill=(235, 235, 232))
+        hx = (w - draw.textlength(handle, font=handle_font)) / 2
+        draw.text((hx + 1, h - 88 + 1), handle, font=handle_font, fill=(0, 0, 0))
+        draw.text((hx, h - 88), handle, font=handle_font, fill=(240, 238, 232))
 
     return img
 
 
+# ---------------------------------------------------------------------------
+# PIPELINE PRINCIPAL
+# ---------------------------------------------------------------------------
+
 def render_quote_image(
     quote: str,
-    theme: str,
     scene_prompt: str,
     handle: str = "@tu_cuenta",
     out_path: str = f"{OUT_DIR}/{IMG_NAME}",
 ) -> None:
     os.makedirs(OUT_DIR, exist_ok=True)
-    img = get_ia_background(theme, scene_prompt, size=(CANVAS_SIZE, CANVAS_SIZE))
+
+    img = get_gemini_image(scene_prompt, size=(CANVAS_SIZE, CANVAS_SIZE))
     img = draw_quote_text(img, quote, handle)
     img = img.convert("RGB")
     img.save(out_path, "JPEG", quality=94, optimize=True)
+    debug(f"Imagen guardada en {out_path}")
 
 
 def main():
@@ -451,11 +397,11 @@ def main():
     os.makedirs(PUBLIC_DIR, exist_ok=True)
 
     theme, phrase, caption, scene_prompt = generate_ia_content()
+
     handle = os.environ.get("IG_HANDLE", "@tu_cuenta")
 
     render_quote_image(
         quote=phrase,
-        theme=theme,
         scene_prompt=scene_prompt,
         handle=handle,
         out_path=f"{OUT_DIR}/{IMG_NAME}",
